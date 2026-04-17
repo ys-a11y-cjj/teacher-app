@@ -181,11 +181,11 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-num" id="stat-weeks" style="color:var(--accent)">—</div><div class="stat-lbl">剩餘週數</div></div>
       <div class="stat-card"><div class="stat-num" id="stat-exam-days" style="color:var(--exam)">—</div><div class="stat-lbl">距下次段考</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-taught" style="color:var(--ink2)">—</div><div class="stat-lbl">已上總堂數</div></div>
-      <div class="stat-card"><div class="stat-num" id="stat-total" style="color:var(--ink2)">—</div><div class="stat-lbl">學期總堂數</div></div>
     </div>
-    <div class="section-label">各科進度</div>
-    <div class="course-list" id="course-list"></div>
+    <div class="section-label">下次段考前各科剩餘堂數</div>
+    <div id="next-exam-courses" style="padding:0 20px;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="section-label">本段考範圍兼課鐘點費</div>
+    <div id="parttime-fee-block" style="padding:0 20px"></div>
     <div style="height:16px"></div>
   </div>
 
@@ -431,14 +431,34 @@ function initGapi() {
 
 function tryAutoLogin() {
   if (!gapiOk || !gisOk) return;
-  if (localStorage.getItem('ta_ok') === '1') tokenClient.requestAccessToken({prompt:''});
+  const saved = localStorage.getItem('ta_ok');
+  const savedDate = localStorage.getItem('ta_date');
+  const today = new Date().toDateString();
+  if (saved === '1' && savedDate === today) {
+    // 同一天：靜默取得 token
+    tokenClient.requestAccessToken({
+      prompt: '',
+      error_callback: () => {
+        // 靜默失敗時顯示登入畫面
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('app').classList.remove('active');
+      }
+    });
+  } else if (saved === '1') {
+    // 隔天：清除舊標記，顯示登入畫面
+    localStorage.removeItem('ta_ok');
+    localStorage.removeItem('ta_date');
+  }
 }
 function handleLogin() {
   if (!gapiOk || !gisOk) { showSync('初始化中，請稍後', true); return; }
-  tokenClient.requestAccessToken({prompt:'consent'});
+  tokenClient.requestAccessToken({prompt:'select_account'});
 }
 async function onSignedIn() {
+  // 記錄登入時間，當天內不需重新登入
+  const today = new Date().toDateString();
   localStorage.setItem('ta_ok', '1');
+  localStorage.setItem('ta_date', today);
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
   showSync('載入資料中…');
@@ -508,8 +528,9 @@ function sanitizeSettings(s) {
     courses: s.courses.slice(0, 20).map(c => ({
       id:           sanitizeStr(c.id, 50),
       name:         sanitizeStr(c.name, 50),
-      color:        /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(c.color) ? c.color : '#888780', // ✅ 支援 3碼與6碼
-      totalLessons: Math.min(Math.max(parseInt(c.totalLessons)||0, 0), 999)
+      color:        /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(c.color) ? c.color : '#888780',
+      totalLessons: Math.min(Math.max(parseInt(c.totalLessons)||0, 0), 999),
+      partTime:     !!c.partTime
     }))
   };
 }
@@ -589,10 +610,24 @@ function switchPage(name) {
 }
 function renderAll() { renderOverview(); renderMeetings(); renderCal(); initRecord(); }
 
+// ── 台灣國定假日（涵蓋114學年度 2025～2026）──
+const TW_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30',
+  '2025-01-31','2025-02-03','2025-02-04','2025-02-28',
+  '2025-04-03','2025-04-04','2025-04-05',
+  '2025-05-01','2025-06-01',
+  '2025-09-28','2025-10-10',
+  '2026-01-01','2026-01-28','2026-01-29','2026-01-30',
+  '2026-01-31','2026-02-02','2026-02-28',
+  '2026-04-04','2026-04-05',
+  '2026-05-01','2026-06-19',
+  '2026-09-28','2026-10-10'
+]);
+
 // ── 核心計算：根據課表計算日期區間內每門課堂數 ──
 // fromDate: 起始日期字串 YYYY-MM-DD（含）
 // toDate:   結束日期字串 YYYY-MM-DD（不含）
-// 自動排除：假期、段考停課日（type=holiday 或 type=exam）
+// 自動排除：台灣國定假日 + 手動輸入的假期與段考停課日
 function calcLessons(fromDate, toDate) {
   const result = {};
   appData.settings.courses.forEach(c => result[c.id] = 0);
@@ -603,12 +638,13 @@ function calcLessons(fromDate, toDate) {
   const to   = new Date(toDate   + 'T00:00:00');
   if (from >= to) return result;
 
-  // 停課日集合（假期 + 段考）
-  const stopDates = new Set(
+  // 停課日：台灣國定假日 ＋ 手動輸入的假期與段考
+  const manualStop = new Set(
     appData.meetings
       .filter(m => m.type === 'holiday' || m.type === 'exam')
       .map(m => m.date)
   );
+  const stopDates = new Set([...TW_HOLIDAYS, ...manualStop]);
 
   const dayKeyMap = {1:'mon',2:'tue',3:'wed',4:'thu',5:'fri'};
   let cur = new Date(from);
@@ -639,8 +675,8 @@ function evOn(date) { return appData.meetings.filter(e => e.date === date); }
 // ── 總覽頁 ──
 function renderOverview() {
   const t = new Date(); const today = new Date(t); today.setHours(0,0,0,0);
-  const todayStr2 = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
-  document.getElementById('overview-jp').textContent = `令和${reiwa(t.getFullYear())}年`;
+  const todayStr2 = t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate());
+  document.getElementById('overview-jp').textContent = '令和'+reiwa(t.getFullYear())+'年';
   document.getElementById('overview-sub').textContent = t.toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'long'});
   const s = appData.settings;
 
@@ -650,87 +686,114 @@ function renderOverview() {
     document.getElementById('stat-weeks').textContent = w;
   }
 
-  // 距下次段考
-  const up = appData.meetings
-    .filter(m => m.type === 'exam' && new Date(m.date+'T00:00:00') >= today)
+  // 所有段考依日期排序
+  const allExams = appData.meetings
+    .filter(m => m.type === 'exam')
     .sort((a,b) => new Date(a.date)-new Date(b.date));
-  document.getElementById('stat-exam-days').textContent = up.length > 0
-    ? Math.ceil((new Date(up[0].date)-today)/864e5)+'天' : '—';
 
-  // ✅ 用 calcLessons 自動計算：
-  // 已上堂數 = 學期開始到今天（不含今天）
-  // 總堂數   = 學期開始到學期結束
-  const hasTimetable = Object.keys(appData.timetable).length > 0;
-  const taughtByC = hasTimetable && s.semesterStart
-    ? calcLessons(s.semesterStart, todayStr2)
-    : null;
-  const totalByC = hasTimetable && s.semesterStart && s.semesterEnd
-    ? calcLessons(s.semesterStart, s.semesterEnd)
-    : null;
+  // 下一次段考
+  const nextExam = allExams.find(m => new Date(m.date+'T00:00:00') >= today);
+  document.getElementById('stat-exam-days').textContent = nextExam
+    ? Math.ceil((new Date(nextExam.date)-today)/864e5)+'天' : '—';
 
-  let taughtSum = 0, totalSum = 0;
-  if (taughtByC) s.courses.forEach(c => taughtSum += taughtByC[c.id]||0);
-  if (totalByC)  s.courses.forEach(c => totalSum  += totalByC[c.id]||0);
+  const necEl = document.getElementById('next-exam-courses');
+  const feeEl = document.getElementById('parttime-fee-block');
+  necEl.innerHTML = ''; feeEl.innerHTML = '';
 
-  document.getElementById('stat-taught').textContent = taughtByC ? taughtSum : '—';
-  document.getElementById('stat-total').textContent  = totalByC  ? totalSum  : '—';
-
-  // 課程卡片
-  const cl = document.getElementById('course-list');
-  cl.innerHTML = '';
-
+  const hasTimetable = Object.values(appData.timetable).some(v => v);
   if (!hasTimetable) {
-    const note = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 4px'});
-    note.textContent = '請先至「課表」頁面設定每週課表，系統才能自動計算堂數。';
-    cl.appendChild(note);
-    return;
+    const n=el('div',{style:'font-size:12px;color:var(--ink3);padding:4px 0'});
+    n.textContent='請先至「課表」頁面設定每週課表。';
+    necEl.appendChild(n); return;
   }
   if (!s.semesterStart) {
-    const note = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 4px'});
-    note.textContent = '請先至「設定」頁面填入學期開始日期。';
-    cl.appendChild(note);
-    return;
+    const n=el('div',{style:'font-size:12px;color:var(--ink3);padding:4px 0'});
+    n.textContent='請先至「設定」頁面填入學期開始日期。';
+    necEl.appendChild(n); return;
+  }
+  if (!nextExam) {
+    const n=el('div',{style:'font-size:12px;color:var(--ink3);padding:4px 0'});
+    n.textContent='尚未設定段考日期，請至「會議行程」新增段考。';
+    necEl.appendChild(n); return;
   }
 
+  // 計算區間：上次段考的隔天（或學期開始日）→ 下次段考當天（不含）
+  const pastExams = allExams.filter(m => new Date(m.date+'T00:00:00') < today);
+  let fromDate = s.semesterStart;
+  if (pastExams.length > 0) {
+    const last = new Date(pastExams[pastExams.length-1].date+'T00:00:00');
+    last.setDate(last.getDate()+1);
+    fromDate = last.getFullYear()+'-'+pad(last.getMonth()+1)+'-'+pad(last.getDate());
+  }
+  const toDate = nextExam.date; // 不含段考當天
+
+  // 計算這個區間全部堂數（從上次段考後到下次段考前）
+  const totalInRange = calcLessons(fromDate, toDate);
+  // 計算已上堂數（從上次段考後到今天）
+  const taughtSoFar = calcLessons(fromDate, todayStr2);
+
+  // 顯示各科剩餘堂數卡片
+  const nextExamDate = new Date(nextExam.date+'T00:00:00');
+  const examLabel = nextExam.title + '（'+(nextExamDate.getMonth()+1)+'/'+nextExamDate.getDate()+'）';
+
+  const headerCard = el('div',{class:'exam-cd-card'});
+  const headerTitle = el('div',{class:'exam-cd-title'});
+  headerTitle.textContent = examLabel+' 前各科剩餘堂數';
+  headerCard.appendChild(headerTitle);
+
   s.courses.forEach(c => {
-    const cnt  = taughtByC ? (taughtByC[c.id]||0) : 0;
-    const tot  = totalByC  ? (totalByC[c.id]||0)  : 0;
-    const rem  = tot - cnt;
-    const pct  = tot > 0 ? Math.round(cnt/tot*100) : 0;
-
-    // 最後一筆手動記錄（備註用）
-    const dates = Object.keys(appData.progress)
-      .filter(d => appData.progress[d][c.id]?.content?.trim()).sort().reverse();
-    const last = dates.length > 0 ? appData.progress[dates[0]][c.id].content : '尚無手動備註';
-
-    const bc = rem<=2?'var(--exam)':rem<=5?'var(--holiday)':'var(--accent)';
-    const bb = rem<=2?'var(--exam-light)':rem<=5?'var(--holiday-light)':'var(--accent-light)';
-
-    const card = el('div', {class:'course-card'});
-    card.addEventListener('click', () => switchPage('record'));
-
-    const top = el('div', {class:'course-top'});
-    const nameDiv = el('div', {class:'course-name'});
-    nameDiv.appendChild(el('div', {class:'course-dot', style:`background:${c.color}`}));
+    const total = totalInRange[c.id]||0;
+    const taught = taughtSoFar[c.id]||0;
+    const rem = Math.max(0, total - taught);
+    const row = el('div',{class:'exam-cd-row'});
+    const nameDiv = el('div',{class:'exam-cd-course'});
+    const dot = el('div',{style:'width:8px;height:8px;border-radius:50%;background:'+c.color+';flex-shrink:0'});
+    nameDiv.appendChild(dot);
     nameDiv.appendChild(document.createTextNode(c.name));
-    const countDiv = el('div', {class:'course-count'});
-    countDiv.appendChild(document.createTextNode('已上 '));
-    countDiv.appendChild(el('span', {}, [String(cnt)]));
-    countDiv.appendChild(document.createTextNode(' / '+tot+' 堂'));
-    top.appendChild(nameDiv); top.appendChild(countDiv);
-
-    const track = el('div', {class:'progress-track'});
-    track.appendChild(el('div', {class:'progress-fill', style:`width:${pct}%;background:${c.color}`}));
-
-    const bottom = el('div', {class:'course-bottom'});
-    const lastDiv = el('div', {class:'course-last'}); lastDiv.textContent = last;
-    const badge = el('div', {class:'course-badge', style:`background:${bb};color:${bc}`});
-    badge.textContent = '剩 '+rem+' 堂';
-    bottom.appendChild(lastDiv); bottom.appendChild(badge);
-
-    card.appendChild(top); card.appendChild(track); card.appendChild(bottom);
-    cl.appendChild(card);
+    if (c.partTime) {
+      const badge = el('span',{style:'font-size:9px;background:#EAF0F5;color:#3A5A8B;padding:1px 5px;border-radius:4px;margin-left:4px'});
+      badge.textContent='兼課'; nameDiv.appendChild(badge);
+    }
+    const cntDiv = el('div',{class:'exam-cd-count'});
+    cntDiv.style.color = rem<=2?'var(--exam)':rem<=5?'var(--holiday)':'var(--accent)';
+    cntDiv.textContent = '剩 '+rem+' 堂（共'+total+'堂）';
+    row.appendChild(nameDiv); row.appendChild(cntDiv);
+    headerCard.appendChild(row);
   });
+  necEl.appendChild(headerCard);
+
+  // 兼課鐘點費計算（本段考區間已上的兼課堂數 × 505）
+  const ptCourses = s.courses.filter(c => c.partTime);
+  if (ptCourses.length > 0) {
+    const feeCard = el('div',{class:'exam-cd-card'});
+    const feeTitle = el('div',{class:'exam-cd-title'});
+    feeTitle.textContent = '本段考範圍兼課鐘點費（已上）';
+    feeCard.appendChild(feeTitle);
+    let totalFee = 0;
+    ptCourses.forEach(c => {
+      const taught = taughtSoFar[c.id]||0;
+      const fee = taught * 505;
+      totalFee += fee;
+      const row = el('div',{class:'exam-cd-row'});
+      const nameDiv = el('div',{class:'exam-cd-course'});
+      const dot = el('div',{style:'width:8px;height:8px;border-radius:50%;background:'+c.color+';flex-shrink:0'});
+      nameDiv.appendChild(dot);
+      nameDiv.appendChild(document.createTextNode(c.name+' × '+taught+' 節'));
+      const feeDiv = el('div',{class:'exam-cd-count',style:'color:var(--meet)'});
+      feeDiv.textContent = 'NT$ '+fee.toLocaleString();
+      row.appendChild(nameDiv); row.appendChild(feeDiv);
+      feeCard.appendChild(row);
+    });
+    // 總計列
+    const totalRow = el('div',{style:'display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;margin-top:4px;border-top:1px solid var(--divider)'});
+    const totalLabel = el('div',{style:'font-size:13px;font-weight:500;color:var(--ink)'});
+    totalLabel.textContent = '合計';
+    const totalAmt = el('div',{style:'font-size:16px;font-weight:500;color:var(--meet)'});
+    totalAmt.textContent = 'NT$ '+totalFee.toLocaleString();
+    totalRow.appendChild(totalLabel); totalRow.appendChild(totalAmt);
+    feeCard.appendChild(totalRow);
+    feeEl.appendChild(feeCard);
+  }
 }
 
 // ── 行事曆 ──
@@ -979,16 +1042,9 @@ function renderCourseRows() {
     const r1=el('div',{class:'settings-row'});
     const k1=el('div',{class:'settings-key'}); k1.textContent='課程名稱';
     const inp=el('input',{type:'text',class:'settings-val-input',style:'text-align:left;width:160px'});
-    inp.value=c.name; // ✅
+    inp.value=c.name;
     inp.addEventListener('change', () => { appData.settings.courses[i].name=inp.value; });
     r1.appendChild(k1); r1.appendChild(inp);
-    // 總堂數
-    const r2=el('div',{class:'settings-row'});
-    const k2=el('div',{class:'settings-key'}); k2.textContent='總堂數';
-    const inp2=el('input',{type:'number',class:'settings-val-input'});
-    inp2.value=c.totalLessons;
-    inp2.addEventListener('change', () => { appData.settings.courses[i].totalLessons=parseInt(inp2.value)||0; });
-    r2.appendChild(k2); r2.appendChild(inp2);
     // 顏色
     const r3=el('div',{class:'settings-row'});
     const k3=el('div',{class:'settings-key'}); k3.textContent='顏色';
@@ -996,16 +1052,24 @@ function renderCourseRows() {
     inp3.value=c.color;
     inp3.addEventListener('change', () => { appData.settings.courses[i].color=inp3.value; });
     r3.appendChild(k3); r3.appendChild(inp3);
+    // 兼課勾選
+    const r4=el('div',{class:'settings-row'});
+    const k4=el('div',{class:'settings-key'}); k4.textContent='兼課（每節505元）';
+    const chk=el('input',{type:'checkbox'});
+    chk.checked=!!c.partTime;
+    chk.style.cssText='width:20px;height:20px;cursor:pointer;accent-color:var(--accent)';
+    chk.addEventListener('change', () => { appData.settings.courses[i].partTime=chk.checked; });
+    r4.appendChild(k4); r4.appendChild(chk);
     // 刪除按鈕
     const delBtn=el('button',{style:'font-size:11px;color:var(--exam);background:none;border:none;cursor:pointer;padding-top:4px'});
     delBtn.textContent='刪除這門課';
-    delBtn.addEventListener('click', () => delCourse(i)); // ✅
-    wrap.appendChild(r1); wrap.appendChild(r2); wrap.appendChild(r3); wrap.appendChild(delBtn);
+    delBtn.addEventListener('click', () => delCourse(i));
+    wrap.appendChild(r1); wrap.appendChild(r3); wrap.appendChild(r4); wrap.appendChild(delBtn);
     r.appendChild(wrap);
   });
 }
 function addCourse() {
-  appData.settings.courses.push({id:'c'+Date.now(),name:'新課程',color:'#888780',totalLessons:18});
+  appData.settings.courses.push({id:'c'+Date.now(),name:'新課程',color:'#888780',totalLessons:18,partTime:false});
   renderCourseRows();
 }
 function delCourse(i) {
