@@ -372,6 +372,7 @@ let appData = {
   timetable: {}
 };
 let fileIds = {settings:null, progress:null, meetings:null, timetable:null};
+let deletedMeetingIds = new Set(); // 記錄本次 session 刪除的會議 ID，防止合併時被還原
 let tokenClient = null, gapiOk = false, gisOk = false;
 let calView = 'month', calYear, calMonth;
 
@@ -431,14 +432,14 @@ function initGapi() {
 
 function tryAutoLogin() {
   if (!gapiOk || !gisOk) return;
-  if (sessionStorage.getItem('ta_ok') === '1') tokenClient.requestAccessToken({prompt:''});
+  if (localStorage.getItem('ta_ok') === '1') tokenClient.requestAccessToken({prompt:''});
 }
 function handleLogin() {
   if (!gapiOk || !gisOk) { showSync('初始化中，請稍後', true); return; }
   tokenClient.requestAccessToken({prompt:'consent'});
 }
 async function onSignedIn() {
-  sessionStorage.setItem('ta_ok', '1');
+  localStorage.setItem('ta_ok', '1');
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
   showSync('載入資料中…');
@@ -451,7 +452,7 @@ function handleLogout() {
   const tok = gapi.client.getToken();
   if (tok) google.accounts.oauth2.revoke(tok.access_token, () => {});
   gapi.client.setToken(null);
-  sessionStorage.removeItem('ta_ok');
+  localStorage.removeItem('ta_ok');
   document.getElementById('app').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
 }
@@ -569,7 +570,10 @@ async function mergeAndSave(type) {
     if (type === 'meetings') {
       const remoteClean = sanitizeMeetings(remote);
       const localIds = new Set(appData.meetings.map(m => m.id));
-      const remoteOnly = remoteClean.filter(m => !localIds.has(m.id));
+      // ✅ 排除已被本地刪除的 ID（deletedMeetingIds 記錄本次 session 刪除的項目）
+      const remoteOnly = remoteClean.filter(m =>
+        !localIds.has(m.id) && !deletedMeetingIds.has(m.id)
+      );
       const merged = [...appData.meetings, ...remoteOnly]
         .sort((a,b) => new Date(a.date) - new Date(b.date));
       appData.meetings = merged;
@@ -979,6 +983,7 @@ async function saveMeeting() {
 }
 async function deleteMeeting(id) {
   if (!confirm('確定要刪除這筆行程嗎？')) return;
+  deletedMeetingIds.add(id); // ✅ 記錄此 ID 已刪除，合併時不會被還原
   appData.meetings=appData.meetings.filter(m=>m.id!==id);
   await saveData('meetings'); renderMeetings(); renderOverview(); renderCal();
 }
