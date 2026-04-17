@@ -372,7 +372,6 @@ let appData = {
   timetable: {}
 };
 let fileIds = {settings:null, progress:null, meetings:null, timetable:null};
-let deletedMeetingIds = new Set(); // 記錄本次 session 刪除的會議 ID，防止合併時被還原
 let tokenClient = null, gapiOk = false, gisOk = false;
 let calView = 'month', calYear, calMonth;
 
@@ -559,42 +558,21 @@ async function loadAll() {
   const tt = await readFile(fileIds.timetable);
   if (tt && typeof tt === 'object') appData.timetable = sanitizeTimetable(tt);
 }
-// ✅ 第三輪修正：saveData 前先讀取雲端最新版本進行合併，防止多裝置資料覆寫
-// 合併策略：meetings 以 id 去重合併；progress 以日期 key 合併本地優先；settings 本地優先
-async function mergeAndSave(type) {
+// 單人使用：直接用本地資料覆寫雲端，不做合併
+// 這樣刪除、修改都能正確反映，不會有資料被還原的問題
+async function saveData(type) {
   showSync('同步中…');
   const id = fileIds[type];
   if (!id) { hideSync(); return; }
-  try {
-    const remote = await readFile(id);
-    if (type === 'meetings') {
-      const remoteClean = sanitizeMeetings(remote);
-      const localIds = new Set(appData.meetings.map(m => m.id));
-      // ✅ 排除已被本地刪除的 ID（deletedMeetingIds 記錄本次 session 刪除的項目）
-      const remoteOnly = remoteClean.filter(m =>
-        !localIds.has(m.id) && !deletedMeetingIds.has(m.id)
-      );
-      const merged = [...appData.meetings, ...remoteOnly]
-        .sort((a,b) => new Date(a.date) - new Date(b.date));
-      appData.meetings = merged;
-      await writeFile(id, merged);
-    } else if (type === 'progress') {
-      const remoteClean = sanitizeProgress(remote);
-      const merged = Object.assign({}, remoteClean, appData.progress);
-      appData.progress = merged;
-      await writeFile(id, merged);
-    } else if (type === 'timetable') {
-      await writeFile(id, appData.timetable);
-    } else {
-      await writeFile(id, appData.settings);
-    }
-  } catch(e) {
-    const map = {settings:appData.settings, progress:appData.progress, meetings:appData.meetings, timetable:appData.timetable};
-    await writeFile(fileIds[type], map[type]);
-  }
+  const map = {
+    settings: appData.settings,
+    progress: appData.progress,
+    meetings: appData.meetings,
+    timetable: appData.timetable
+  };
+  await writeFile(id, map[type]);
   hideSync();
 }
-async function saveData(type) { await mergeAndSave(type); }
 
 // ✅ 修正三：VALID_PAGES 白名單，防止任意字串被用來組成 DOM ID
 const VALID_PAGES = new Set(['overview','calendar','timetable','record','meetings','settings']);
@@ -983,7 +961,6 @@ async function saveMeeting() {
 }
 async function deleteMeeting(id) {
   if (!confirm('確定要刪除這筆行程嗎？')) return;
-  deletedMeetingIds.add(id); // ✅ 記錄此 ID 已刪除，合併時不會被還原
   appData.meetings=appData.meetings.filter(m=>m.id!==id);
   await saveData('meetings'); renderMeetings(); renderOverview(); renderCal();
 }
