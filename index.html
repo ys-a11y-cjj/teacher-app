@@ -1017,7 +1017,7 @@ function renderTimetable() {
       const btn = el('button', {class:'tt-cell' + (courseId ? ' selected' : ' empty')});
       if (course) {
         btn.textContent = course.name.length > 5 ? course.name.slice(0,5) : course.name;
-        btn.style.cssText = `background:${course.color}22;border-color:${course.color};color:#2C2C2A;
+        btn.style.cssText = `background:${course.color}33;border-color:${course.color};color:#2C2C2A`;
       } else {
         btn.textContent = '空堂';
       }
