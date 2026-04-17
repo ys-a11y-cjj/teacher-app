@@ -7,10 +7,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="教師手帳">
 <meta name="theme-color" content="#FAFAF7">
-<!-- ✅ CSP 標頭：允許 Google 官方所有必要來源 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com https://ssl.gstatic.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com https://content.googleapis.com; img-src 'self' data: https://*.googleusercontent.com https://ssl.gstatic.com https://www.gstatic.com;">
+<!-- CSP 暫時移除以確認登入功能正常，確認後再加回 -->
 <link rel="manifest" href="manifest.json">
 <title>教師手帳</title>
+<script src="https://apis.google.com/js/api.js" defer></script>
+<script src="https://accounts.google.com/gsi/client" defer></script>
 <style>
 :root{--paper:#FAFAF7;--ink:#2C2C2A;--ink2:#5F5E5A;--ink3:#B4B2A9;--accent:#4A7C6F;--accent-light:#E8F2F0;--exam:#8B3A3A;--exam-light:#F5EAEA;--meet:#3A5A8B;--meet-light:#EAF0F5;--holiday:#7A6A3A;--holiday-light:#F5F0E0;--border:#E0DED8;--divider:#EDEBE6;--safe-bottom:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -126,6 +127,21 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
 .settings-key{font-size:12px;color:var(--ink2)}
 .settings-val-input{border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--ink);background:var(--paper);width:140px;font-family:inherit;text-align:right}
 .settings-val-input:focus{outline:none;border-color:var(--accent)}
+.tt-wrap{overflow-x:auto;margin-bottom:8px}
+.tt-table{border-collapse:collapse;width:100%;min-width:320px}
+.tt-table th{font-size:10px;color:var(--ink3);letter-spacing:0.06em;text-align:center;padding:4px 2px;font-weight:400;border-bottom:0.5px solid var(--divider)}
+.tt-table td{padding:2px}
+.tt-period{font-size:10px;color:var(--ink3);text-align:center;padding:4px 4px;white-space:nowrap}
+.tt-cell{width:100%;min-height:36px;border-radius:6px;border:0.5px solid var(--border);background:white;font-size:10px;color:var(--ink3);cursor:pointer;padding:2px;text-align:center;line-height:1.3;transition:all 0.15s;font-family:inherit}
+.tt-cell:active{opacity:0.7}
+.tt-cell.selected{border-width:1.5px;font-weight:500}
+.tt-cell.empty{background:var(--paper);color:var(--ink3)}
+.exam-cd-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:14px 16px}
+.exam-cd-title{font-size:13px;font-weight:500;margin-bottom:10px;color:var(--ink)}
+.exam-cd-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--divider)}
+.exam-cd-row:last-child{border-bottom:none}
+.exam-cd-course{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:6px}
+.exam-cd-count{font-size:13px;font-weight:500}
 </style>
 </head>
 <body>
@@ -205,6 +221,25 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div style="height:16px"></div>
   </div>
 
+  <div id="page-timetable" class="page">
+    <div class="page-header">
+      <div class="page-header-jp">週課表設定</div>
+      <div class="page-header-title">課表</div>
+      <div class="page-header-sub">點格子選擇該節要上的課</div>
+    </div>
+    <div class="section-label">週課表</div>
+    <div style="padding:0 12px">
+      <div id="timetable-grid"></div>
+    </div>
+    <div style="height:12px"></div>
+    <div style="padding:0 20px 8px">
+      <button class="save-btn" id="save-timetable-btn">儲存課表</button>
+    </div>
+    <div class="section-label">段考前堂數預估</div>
+    <div id="exam-countdown-list" style="padding:0 20px;display:flex;flex-direction:column;gap:10px"></div>
+    <div style="height:16px"></div>
+  </div>
+
   <div id="page-meetings" class="page">
     <div class="page-header">
       <div class="page-header-jp">會議・特殊日期</div>
@@ -247,13 +282,13 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
       <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="16" height="15" rx="2"/><line x1="7" y1="2" x2="7" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="3" y1="9" x2="19" y2="9"/></svg>
       <div class="nav-label">行事曆</div>
     </div>
+    <div class="nav-item" id="nav-timetable">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="16" height="16" rx="2"/><line x1="3" y1="8" x2="19" y2="8"/><line x1="8" y1="3" x2="8" y2="19"/><line x1="13" y1="3" x2="13" y2="19"/><line x1="3" y1="13" x2="19" y2="13"/></svg>
+      <div class="nav-label">課表</div>
+    </div>
     <div class="nav-item" id="nav-record">
       <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h14M4 11h10M4 16h7"/></svg>
       <div class="nav-label">記錄</div>
-    </div>
-    <div class="nav-item" id="nav-meetings">
-      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H3a1 1 0 00-1 1v10a1 1 0 001 1h5l3 3 3-3h5a1 1 0 001-1V5a1 1 0 00-1-1z"/></svg>
-      <div class="nav-label">會議</div>
     </div>
     <div class="nav-item" id="nav-settings">
       <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="3"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.22 4.22l1.42 1.42M16.36 16.36l1.42 1.42M4.22 17.78l1.42-1.42M16.36 5.64l1.42-1.42"/></svg>
@@ -327,9 +362,12 @@ let appData = {
     ]
   },
   progress: {},
-  meetings: []
+  meetings: [],
+  // timetable: { 'mon-1': 'c1', 'mon-2': null, ... }
+  // key 格式: 'mon'/'tue'/'wed'/'thu'/'fri' + '-' + 節次(1-7)
+  timetable: {}
 };
-let fileIds = {settings:null, progress:null, meetings:null};
+let fileIds = {settings:null, progress:null, meetings:null, timetable:null};
 let tokenClient = null, gapiOk = false, gisOk = false;
 let calView = 'month', calYear, calMonth;
 
@@ -351,40 +389,42 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
   document.getElementById('record-date-picker').addEventListener('change', e => loadRecordForDate(e.target.value));
 
-  ['overview','calendar','record','meetings','settings'].forEach(name => {
+  document.getElementById('save-timetable-btn').addEventListener('click', saveTimetable);
+  ['overview','calendar','timetable','record','meetings','settings'].forEach(name => {
     document.getElementById('nav-'+name).addEventListener('click', () => switchPage(name));
   });
 
-  loadGapi();
+  // 腳本已在 <head> 靜態載入，直接初始化
+  initGapi();
 });
 
-function loadGapi() {
-  const s1 = document.createElement('script');
-  s1.src = 'https://apis.google.com/js/api.js';
-  s1.addEventListener('load', gapiLoad);
-  document.head.appendChild(s1);
-  const s2 = document.createElement('script');
-  s2.src = 'https://accounts.google.com/gsi/client';
-  s2.addEventListener('load', gisLoad);
-  document.head.appendChild(s2);
+function initGapi() {
+  // 等待 gapi 與 google 物件載入完成
+  const waitFor = (check, fn, ms=100, max=50) => {
+    if (check()) { fn(); return; }
+    if (max <= 0) { showSync('Google 服務載入失敗，請重新整理頁面', true); return; }
+    setTimeout(() => waitFor(check, fn, ms, max-1), ms);
+  };
+  waitFor(() => typeof gapi !== 'undefined', () => {
+    gapi.load('client', async () => {
+      await gapi.client.init({discoveryDocs:[DISCOVERY]});
+      gapiOk = true;
+      tryAutoLogin();
+    });
+  });
+  waitFor(() => typeof google !== 'undefined' && google.accounts, () => {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: async r => {
+        if (r.error) { showSync('登入失敗，請重試', true); return; }
+        await onSignedIn();
+      }
+    });
+    gisOk = true;
+    tryAutoLogin();
+  });
 }
 
-function gapiLoad() {
-  gapi.load('client', async () => {
-    await gapi.client.init({discoveryDocs:[DISCOVERY]});
-    gapiOk = true; tryAutoLogin();
-  });
-}
-function gisLoad() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID, scope: SCOPES,
-    callback: async r => {
-      if (r.error) { showSync('登入失敗，請重試', true); return; }
-      await onSignedIn();
-    }
-  });
-  gisOk = true; tryAutoLogin();
-}
 function tryAutoLogin() {
   if (!gapiOk || !gisOk) return;
   if (sessionStorage.getItem('ta_ok') === '1') tokenClient.requestAccessToken({prompt:''});
@@ -503,13 +543,16 @@ async function loadAll() {
   fileIds.settings = await findOrCreate('teacher-app-settings.json');
   fileIds.progress = await findOrCreate('teacher-app-progress.json');
   fileIds.meetings = await findOrCreate('teacher-app-meetings.json');
+  fileIds.timetable = await findOrCreate('teacher-app-timetable.json');
   const s = await readFile(fileIds.settings);
   const cleanS = sanitizeSettings(s);
-  if (cleanS) appData.settings = cleanS; // ✅ 驗證後才使用
+  if (cleanS) appData.settings = cleanS;
   const p = await readFile(fileIds.progress);
-  appData.progress = sanitizeProgress(p); // ✅ 驗證後才使用
+  appData.progress = sanitizeProgress(p);
   const m = await readFile(fileIds.meetings);
-  appData.meetings = sanitizeMeetings(m); // ✅ 驗證後才使用
+  appData.meetings = sanitizeMeetings(m);
+  const tt = await readFile(fileIds.timetable);
+  if (tt && typeof tt === 'object') appData.timetable = sanitizeTimetable(tt);
 }
 // ✅ 第三輪修正：saveData 前先讀取雲端最新版本進行合併，防止多裝置資料覆寫
 // 合併策略：meetings 以 id 去重合併；progress 以日期 key 合併本地優先；settings 本地優先
@@ -532,11 +575,13 @@ async function mergeAndSave(type) {
       const merged = Object.assign({}, remoteClean, appData.progress);
       appData.progress = merged;
       await writeFile(id, merged);
+    } else if (type === 'timetable') {
+      await writeFile(id, appData.timetable);
     } else {
       await writeFile(id, appData.settings);
     }
   } catch(e) {
-    const map = {settings:appData.settings, progress:appData.progress, meetings:appData.meetings};
+    const map = {settings:appData.settings, progress:appData.progress, meetings:appData.meetings, timetable:appData.timetable};
     await writeFile(fileIds[type], map[type]);
   }
   hideSync();
@@ -544,7 +589,7 @@ async function mergeAndSave(type) {
 async function saveData(type) { await mergeAndSave(type); }
 
 // ✅ 修正三：VALID_PAGES 白名單，防止任意字串被用來組成 DOM ID
-const VALID_PAGES = new Set(['overview','calendar','record','meetings','settings']);
+const VALID_PAGES = new Set(['overview','calendar','timetable','record','meetings','settings']);
 function switchPage(name) {
   if (!VALID_PAGES.has(name)) return; // ✅ 白名單過濾
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -554,6 +599,7 @@ function switchPage(name) {
   if (name === 'record') initRecord();
   if (name === 'calendar') renderCal();
   if (name === 'settings') renderSettings();
+  if (name === 'timetable') renderTimetable();
 }
 function renderAll() { renderOverview(); renderMeetings(); renderCal(); initRecord(); }
 
@@ -911,6 +957,228 @@ async function saveSettings() {
   appData.settings.semesterStart=document.getElementById('set-start').value;
   appData.settings.semesterEnd=document.getElementById('set-end').value;
   await saveData('settings'); renderOverview(); alert('設定已儲存！');
+}
+
+// ── 課表頁 ──
+const DAYS = ['mon','tue','wed','thu','fri'];
+const DAY_LABELS = ['週一','週二','週三','週四','週五'];
+const PERIODS = [1,2,3,4,5,6,7];
+
+function sanitizeTimetable(tt) {
+  if (!tt || typeof tt !== 'object') return {};
+  const out = {};
+  const courseIds = new Set(appData.settings.courses.map(c => c.id));
+  DAYS.forEach(d => {
+    PERIODS.forEach(p => {
+      const key = d+'-'+p;
+      const val = tt[key];
+      if (val && courseIds.has(val)) out[key] = val;
+      else out[key] = null;
+    });
+  });
+  return out;
+}
+
+function renderTimetable() {
+  const courses = appData.settings.courses;
+  const tt = appData.timetable;
+  const grid = document.getElementById('timetable-grid');
+  grid.innerHTML = '';
+
+  // 表格
+  const wrap = el('div', {class:'tt-wrap'});
+  const table = el('table', {class:'tt-table'});
+
+  // 表頭
+  const thead = el('thead');
+  const headRow = el('tr');
+  headRow.appendChild(el('th', {}, ['節次']));
+  DAY_LABELS.forEach(d => {
+    const th = el('th'); th.textContent = d; headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  // 表身
+  const tbody = el('tbody');
+  PERIODS.forEach(p => {
+    const tr = el('tr');
+    const periodCell = el('td', {class:'tt-period'}); periodCell.textContent = '第'+p+'節';
+    tr.appendChild(periodCell);
+    DAYS.forEach(d => {
+      const key = d+'-'+p;
+      const courseId = tt[key] || null;
+      const course = courses.find(c => c.id === courseId);
+      const td = el('td');
+      const btn = el('button', {class:'tt-cell' + (courseId ? ' selected' : ' empty')});
+      if (course) {
+        btn.textContent = course.name.length > 5 ? course.name.slice(0,5) : course.name;
+        btn.style.cssText = `background:${course.color}22;border-color:${course.color};color:${course.color}`;
+      } else {
+        btn.textContent = '空堂';
+      }
+      btn.addEventListener('click', () => openCellPicker(key, btn));
+      td.appendChild(btn);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  grid.appendChild(wrap);
+
+  renderExamCountdown();
+}
+
+// 格子選課 picker
+let currentPickerKey = null;
+function openCellPicker(key, btnEl) {
+  currentPickerKey = key;
+  const existing = document.getElementById('cell-picker');
+  if (existing) existing.remove();
+
+  const courses = appData.settings.courses;
+  const overlay = el('div', {style:'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(44,44,42,0.4);z-index:200;display:flex;align-items:flex-end;justify-content:center'});
+  overlay.id = 'cell-picker';
+
+  const sheet = el('div', {style:'background:var(--paper);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:430px'});
+  const title = el('div', {style:'font-size:14px;font-weight:500;margin-bottom:14px;color:var(--ink)'});
+  const keyParts = key.split('-');
+  const dayIdx = DAYS.indexOf(keyParts[0]);
+  title.textContent = DAY_LABELS[dayIdx] + ' 第' + keyParts[1] + '節';
+  sheet.appendChild(title);
+
+  // 空堂選項
+  const emptyBtn = el('button', {style:'width:100%;padding:10px;border-radius:10px;border:0.5px solid var(--border);background:white;font-size:13px;color:var(--ink3);cursor:pointer;margin-bottom:8px;font-family:inherit;text-align:left'});
+  emptyBtn.textContent = '空堂（不排課）';
+  emptyBtn.addEventListener('click', () => { setCellCourse(key, null); overlay.remove(); });
+  sheet.appendChild(emptyBtn);
+
+  // 各課程選項
+  courses.forEach(c => {
+    const btn = el('button', {style:`width:100%;padding:10px;border-radius:10px;border:1.5px solid ${c.color};background:${c.color}22;font-size:13px;color:${c.color};cursor:pointer;margin-bottom:8px;font-family:inherit;text-align:left;font-weight:500`});
+    btn.textContent = c.name;
+    btn.addEventListener('click', () => { setCellCourse(key, c.id); overlay.remove(); });
+    sheet.appendChild(btn);
+  });
+
+  const cancelBtn = el('button', {style:'width:100%;padding:10px;border-radius:10px;border:0.5px solid var(--border);background:white;font-size:13px;color:var(--ink2);cursor:pointer;font-family:inherit'});
+  cancelBtn.textContent = '取消';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+  sheet.appendChild(cancelBtn);
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  overlay.appendChild(sheet);
+  document.getElementById('app').appendChild(overlay);
+}
+
+function setCellCourse(key, courseId) {
+  appData.timetable[key] = courseId;
+  renderTimetable();
+}
+
+async function saveTimetable() {
+  await saveData('timetable');
+  renderExamCountdown();
+  renderOverview();
+  alert('課表已儲存！');
+}
+
+// ── 段考前堂數計算 ──
+function countLessonsBeforeDate(targetDate) {
+  // 計算從今天到 targetDate（不含）之間，每門課有幾堂
+  const result = {};
+  appData.settings.courses.forEach(c => result[c.id] = 0);
+
+  const start = appData.settings.semesterStart;
+  if (!start) return result;
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(targetDate + 'T00:00:00');
+
+  // 取得所有假期與停課日
+  const holidayDates = new Set(
+    appData.meetings
+      .filter(m => m.type === 'holiday' || m.type === 'exam')
+      .map(m => m.date)
+  );
+
+  const dayMap = {0:'sun',1:'mon',2:'tue',3:'wed',4:'thu',5:'fri',6:'sat'};
+  let cur = new Date(today);
+
+  while (cur < target) {
+    const dow = cur.getDay();
+    const dstr = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+
+    if (dow >= 1 && dow <= 5 && !holidayDates.has(dstr)) {
+      const dayKey = dayMap[dow];
+      PERIODS.forEach(p => {
+        const key = dayKey + '-' + p;
+        const courseId = appData.timetable[key];
+        if (courseId && result.hasOwnProperty(courseId)) {
+          result[courseId]++;
+        }
+      });
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+}
+
+function renderExamCountdown() {
+  const container = document.getElementById('exam-countdown-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exams = appData.meetings
+    .filter(m => m.type === 'exam' && new Date(m.date+'T00:00:00') >= today)
+    .sort((a,b) => new Date(a.date)-new Date(b.date));
+
+  if (!exams.length) {
+    const emp = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 0'});
+    emp.textContent = '尚未設定段考日期，請至「會議行程」新增段考。';
+    container.appendChild(emp);
+    return;
+  }
+
+  if (!appData.settings.semesterStart) {
+    const emp = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 0'});
+    emp.textContent = '請先在「設定」頁面填入學期開始日期。';
+    container.appendChild(emp);
+    return;
+  }
+
+  exams.forEach(exam => {
+    const counts = countLessonsBeforeDate(exam.date);
+    const card = el('div', {class:'exam-cd-card'});
+    const title = el('div', {class:'exam-cd-title'});
+    const d = new Date(exam.date+'T00:00:00');
+    title.textContent = exam.title + '　' + (d.getMonth()+1) + '/' + d.getDate() + ' 前剩餘堂數';
+    card.appendChild(title);
+
+    const hasCourses = Object.values(counts).some(v => v > 0);
+    if (!hasCourses) {
+      const note = el('div', {style:'font-size:11px;color:var(--ink3)'});
+      note.textContent = '尚未設定課表，請先填寫上方課表格子。';
+      card.appendChild(note);
+    } else {
+      appData.settings.courses.forEach(c => {
+        const n = counts[c.id] || 0;
+        const row = el('div', {class:'exam-cd-row'});
+        const nameDiv = el('div', {class:'exam-cd-course'});
+        const dot = el('div', {style:`width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0`});
+        nameDiv.appendChild(dot);
+        nameDiv.appendChild(document.createTextNode(c.name));
+        const countDiv = el('div', {class:'exam-cd-count'});
+        countDiv.style.color = n <= 2 ? 'var(--exam)' : n <= 5 ? 'var(--holiday)' : 'var(--accent)';
+        countDiv.textContent = n + ' 堂';
+        row.appendChild(nameDiv); row.appendChild(countDiv);
+        card.appendChild(row);
+      });
+    }
+    container.appendChild(card);
+  });
 }
 </script>
 </body>
