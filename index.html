@@ -610,19 +610,86 @@ function switchPage(name) {
 }
 function renderAll() { renderOverview(); renderMeetings(); renderCal(); initRecord(); }
 
-// ── 台灣國定假日（涵蓋114學年度 2025～2026）──
-const TW_HOLIDAYS = new Set([
-  '2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30',
-  '2025-01-31','2025-02-03','2025-02-04','2025-02-28',
-  '2025-04-03','2025-04-04','2025-04-05',
-  '2025-05-01','2025-06-01',
-  '2025-09-28','2025-10-10',
-  '2026-01-01','2026-01-28','2026-01-29','2026-01-30',
-  '2026-01-31','2026-02-02','2026-02-28',
-  '2026-04-04','2026-04-05',
-  '2026-05-01','2026-06-19',
-  '2026-09-28','2026-10-10'
-]);
+// ── 台灣國定假日（涵蓋 2025～2030，固定假日自動計算、農曆假日查表）──
+// 農曆假日對照表（春節初一、除夕、端午、中秋的國曆日期）
+const LUNAR_HOLIDAYS = {
+  // [除夕, 春節初一, 春節初二, 春節初三, 端午, 中秋]
+  2025: { eve:'2025-01-28', cny1:'2025-01-29', cny2:'2025-01-30', cny3:'2025-01-31', dragon:'2025-05-31', moon:'2025-10-06' },
+  2026: { eve:'2026-02-16', cny1:'2026-02-17', cny2:'2026-02-18', cny3:'2026-02-19', dragon:'2026-06-19', moon:'2026-09-25' },
+  2027: { eve:'2027-02-05', cny1:'2027-02-06', cny2:'2027-02-07', cny3:'2027-02-08', dragon:'2027-06-09', moon:'2027-09-15' },
+  2028: { eve:'2028-01-25', cny1:'2028-01-26', cny2:'2028-01-27', cny3:'2028-01-28', dragon:'2028-05-28', moon:'2028-10-03' },
+  2029: { eve:'2029-02-12', cny1:'2029-02-13', cny2:'2029-02-14', cny3:'2029-02-15', dragon:'2029-06-16', moon:'2029-09-22' },
+  2030: { eve:'2030-02-02', cny1:'2030-02-03', cny2:'2030-02-04', cny3:'2030-02-05', dragon:'2030-06-05', moon:'2030-09-12' }
+};
+
+// 工具：日期字串 → Date 物件 / Date 物件 → 字串
+function _ymd(y, m, d) {
+  return y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+}
+function _toStr(date) {
+  return _ymd(date.getFullYear(), date.getMonth()+1, date.getDate());
+}
+// 計算補假日：遇六→前一個上班日（週五）、遇日→次一個上班日（週一）
+function _makeupDay(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = d.getDay();
+  if (dow === 6) { d.setDate(d.getDate() - 1); return _toStr(d); }
+  if (dow === 0) { d.setDate(d.getDate() + 1); return _toStr(d); }
+  return null;
+}
+
+// 為單一年份產生所有國定假日（含補假）
+function _holidaysForYear(year) {
+  const list = [];
+  // 固定假日（規則計算）
+  const fixed = [
+    _ymd(year, 1, 1),    // 元旦
+    _ymd(year, 2, 28),   // 和平紀念日
+    _ymd(year, 4, 4),    // 兒童節
+    _ymd(year, 4, 5),    // 清明節（多數年份；少數年份清明可能在 4/4，與兒童節同日，仍列入）
+    _ymd(year, 5, 1),    // 勞動節
+    _ymd(year, 9, 28),   // 教師節
+    _ymd(year, 10, 10),  // 國慶日
+    _ymd(year, 10, 25),  // 光復節
+    _ymd(year, 12, 25)   // 行憲紀念日
+  ];
+  fixed.forEach(d => {
+    list.push(d);
+    const m = _makeupDay(d);
+    if (m) list.push(m);
+  });
+
+  // 農曆假日（查表）
+  const lunar = LUNAR_HOLIDAYS[year];
+  if (lunar) {
+    // 小年夜（除夕前一日）
+    const eveDate = new Date(lunar.eve + 'T00:00:00');
+    eveDate.setDate(eveDate.getDate() - 1);
+    list.push(_toStr(eveDate));
+    // 除夕、春節初一～初三
+    list.push(lunar.eve, lunar.cny1, lunar.cny2, lunar.cny3);
+    // 春節若有逢週六日，原則上補假（簡化：仍套用補假規則）
+    [lunar.eve, lunar.cny1, lunar.cny2, lunar.cny3].forEach(d => {
+      const m = _makeupDay(d);
+      if (m) list.push(m);
+    });
+    // 端午、中秋
+    list.push(lunar.dragon);
+    const dm = _makeupDay(lunar.dragon); if (dm) list.push(dm);
+    list.push(lunar.moon);
+    const mm = _makeupDay(lunar.moon); if (mm) list.push(mm);
+  }
+  return list;
+}
+
+// 產生 2025～2030 完整清單
+const TW_HOLIDAYS = (() => {
+  const all = [];
+  for (let y = 2025; y <= 2030; y++) {
+    all.push(..._holidaysForYear(y));
+  }
+  return new Set(all);
+})();
 
 // ── 核心計算：根據課表計算日期區間內每門課堂數 ──
 // fromDate: 起始日期字串 YYYY-MM-DD（含）
