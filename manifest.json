@@ -1,0 +1,15 @@
+{
+  "name": "教師手帳",
+  "short_name": "教師手帳",
+  "description": "課程進度與會議管理",
+  "start_url": "/teacher-app/",
+  "scope": "/teacher-app/",
+  "display": "standalone",
+  "background_color": "#FAFAF7",
+  "theme_color": "#4A7C6F",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="教師手帳">
+<meta name="theme-color" content="#FAFAF7">
+<!-- ✅ 風險三修正：CSP 標頭，只允許 Google 官方來源的腳本 -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' https://apis.google.com https://accounts.google.com;
+  style-src 'self' 'unsafe-inline';
+  connect-src 'self' https://www.googleapis.com https://accounts.google.com;
+  frame-src https://accounts.google.com;
+  img-src 'self' data:;
+">
+<link rel="manifest" href="manifest.json">
+<title>教師手帳</title>
+<style>
+:root{--paper:#FAFAF7;--ink:#2C2C2A;--ink2:#5F5E5A;--ink3:#B4B2A9;--accent:#4A7C6F;--accent-light:#E8F2F0;--exam:#8B3A3A;--exam-light:#F5EAEA;--meet:#3A5A8B;--meet-light:#EAF0F5;--holiday:#7A6A3A;--holiday-light:#F5F0E0;--border:#E0DED8;--divider:#EDEBE6;--safe-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'Hiragino Sans','Noto Sans TC',sans-serif;background:var(--paper);color:var(--ink);max-width:430px;margin:0 auto;min-height:100vh}
+#login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 32px;text-align:center}
+.login-logo{width:72px;height:72px;background:var(--accent-light);border-radius:20px;display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+.login-title{font-size:22px;font-weight:500;margin-bottom:6px}
+.login-sub{font-size:14px;color:var(--ink2);margin-bottom:40px;line-height:1.6}
+.login-btn{display:flex;align-items:center;gap:10px;background:white;border:0.5px solid var(--border);border-radius:12px;padding:14px 24px;font-size:15px;font-weight:500;color:var(--ink);cursor:pointer;width:100%;justify-content:center;font-family:inherit}
+.login-note{font-size:11px;color:var(--ink3);margin-top:20px;line-height:1.7}
+#app{display:none;flex-direction:column;min-height:100vh}
+#app.active{display:flex}
+.page{display:none;flex:1;flex-direction:column;overflow-y:auto;padding-bottom:calc(72px + var(--safe-bottom))}
+.page.active{display:flex}
+.page-header{padding:52px 20px 16px;border-bottom:0.5px solid var(--divider)}
+.page-header-jp{font-size:10px;color:var(--ink3);letter-spacing:0.14em;margin-bottom:3px}
+.page-header-title{font-size:22px;font-weight:500;letter-spacing:-0.01em}
+.page-header-sub{font-size:12px;color:var(--ink2);margin-top:3px}
+.section-label{font-size:10px;letter-spacing:0.12em;color:var(--ink3);padding:16px 20px 8px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 20px;margin-bottom:4px}
+.stat-card{background:white;border:0.5px solid var(--border);border-radius:12px;padding:12px 14px}
+.stat-num{font-size:24px;font-weight:500;line-height:1}
+.stat-lbl{font-size:11px;color:var(--ink3);margin-top:4px;letter-spacing:0.04em}
+.course-list{padding:0 20px;display:flex;flex-direction:column;gap:10px}
+.course-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer}
+.course-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.course-name{font-size:14px;font-weight:500;display:flex;align-items:center;gap:7px}
+.course-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.course-count{font-size:12px;color:var(--ink3)}
+.course-count span{color:var(--ink2);font-weight:500}
+.progress-track{height:4px;background:var(--divider);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.progress-fill{height:100%;border-radius:2px}
+.course-bottom{display:flex;justify-content:space-between;align-items:center}
+.course-last{font-size:11px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.course-badge{font-size:10px;padding:2px 8px;border-radius:5px;letter-spacing:0.03em;flex-shrink:0}
+.cal-controls{display:flex;align-items:center;gap:8px;padding:12px 20px 4px}
+.cal-nav{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border);background:white;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink2)}
+.cal-month-label{flex:1;font-size:15px;font-weight:500;text-align:center}
+.view-toggle{display:flex;border:0.5px solid var(--border);border-radius:8px;overflow:hidden}
+.view-btn{padding:5px 14px;font-size:12px;background:transparent;border:none;color:var(--ink2);cursor:pointer;font-family:inherit}
+.view-btn.active{background:var(--accent);color:white}
+.cal-grid-head{display:grid;grid-template-columns:repeat(7,1fr);padding:8px 20px 4px}
+.cal-dh{text-align:center;font-size:10px;color:var(--ink3);letter-spacing:0.06em}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;padding:0 20px}
+.cal-day{min-height:52px;padding:4px 2px;cursor:pointer}
+.cal-day-num{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink2);margin:0 auto 2px;border-radius:50%}
+.cal-day-num.today{background:var(--accent);color:white;font-weight:500}
+.cal-day-num.other{color:var(--ink3)}
+.cal-day-num.sun{color:var(--exam)}
+.cal-ev{font-size:9px;padding:1px 3px;border-radius:3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}
+.cal-ev.meeting{background:var(--meet-light);color:var(--meet)}
+.cal-ev.exam{background:var(--exam-light);color:var(--exam)}
+.cal-ev.holiday{background:var(--holiday-light);color:var(--holiday)}
+.week-view{padding:0 20px}
+.week-day-block{margin-bottom:12px}
+.week-day-label{font-size:11px;color:var(--ink3);letter-spacing:0.08em;margin-bottom:6px;padding-top:8px;border-top:0.5px solid var(--divider)}
+.week-day-label.today-label{color:var(--accent);font-weight:500}
+.week-ev-card{background:white;border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:stretch;gap:10px}
+.week-ev-bar{width:3px;border-radius:2px;flex-shrink:0}
+.week-ev-body{flex:1}
+.week-ev-type{font-size:9px;letter-spacing:0.1em;color:var(--ink3);margin-bottom:2px}
+.week-ev-title{font-size:13px;font-weight:500}
+.week-ev-meta{font-size:11px;color:var(--ink2);margin-top:2px}
+.empty-state{text-align:center;padding:20px;font-size:12px;color:var(--ink3)}
+.selected-date-section{padding:12px 20px 0;border-top:0.5px solid var(--divider);margin-top:8px}
+.selected-date-title{font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:8px}
+.record-list{padding:0 20px;display:flex;flex-direction:column;gap:10px}
+.record-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:14px 16px}
+.record-course-name{font-size:14px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.record-field{margin-bottom:10px}
+.record-label{font-size:10px;color:var(--ink3);letter-spacing:0.08em;margin-bottom:4px}
+.record-input{width:100%;border:0.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink);background:var(--paper);font-family:inherit}
+.record-input:focus{outline:none;border-color:var(--accent)}
+textarea.record-input{resize:none;height:60px;line-height:1.5}
+.save-btn{width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit}
+.meeting-list{padding:0 20px;display:flex;flex-direction:column;gap:10px}
+.meeting-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:stretch}
+.meeting-bar{width:3px;border-radius:2px;background:var(--meet);flex-shrink:0}
+.meeting-bar.exam{background:var(--exam)}
+.meeting-bar.holiday{background:var(--holiday)}
+.meeting-body{flex:1}
+.meeting-type-badge{font-size:9px;letter-spacing:0.1em;padding:2px 6px;border-radius:4px;display:inline-block;margin-bottom:4px}
+.meeting-type-badge.meeting{background:var(--meet-light);color:var(--meet)}
+.meeting-type-badge.exam{background:var(--exam-light);color:var(--exam)}
+.meeting-type-badge.holiday{background:var(--holiday-light);color:var(--holiday)}
+.meeting-title{font-size:14px;font-weight:500;margin-bottom:3px}
+.meeting-meta{font-size:11px;color:var(--ink2)}
+.meeting-delete{background:none;border:none;color:var(--ink3);font-size:18px;cursor:pointer;padding:0 4px;align-self:center}
+.add-meeting-btn{margin:0 20px;background:white;border:0.5px dashed var(--border);border-radius:14px;padding:14px;font-size:13px;color:var(--ink3);cursor:pointer;text-align:center;width:calc(100% - 40px);font-family:inherit}
+.modal-overlay{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(44,44,42,0.5);z-index:100;align-items:flex-end;min-height:100vh}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--paper);border-radius:20px 20px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));width:100%}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:16px}
+.modal-field{margin-bottom:12px}
+.modal-label{font-size:10px;color:var(--ink3);letter-spacing:0.08em;margin-bottom:4px}
+.modal-input{width:100%;border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink);background:white;font-family:inherit}
+.modal-input:focus{outline:none;border-color:var(--accent)}
+.modal-btns{display:flex;gap:8px;margin-top:16px}
+.modal-cancel{flex:1;padding:12px;border-radius:10px;border:0.5px solid var(--border);background:white;font-size:14px;color:var(--ink2);cursor:pointer;font-family:inherit}
+.modal-save{flex:2;padding:12px;border-radius:10px;border:none;background:var(--accent);font-size:14px;font-weight:500;color:white;cursor:pointer;font-family:inherit}
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(250,250,247,0.95);border-top:0.5px solid var(--border);display:flex;padding-bottom:var(--safe-bottom);z-index:50;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;cursor:pointer;color:var(--ink3)}
+.nav-item svg{width:22px;height:22px}
+.nav-label{font-size:9px;letter-spacing:0.06em}
+.nav-item.active{color:var(--accent)}
+.sync-bar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:var(--accent);color:white;font-size:11px;text-align:center;padding:8px;z-index:200;display:none;letter-spacing:0.06em}
+.sync-bar.show{display:block}
+.sync-bar.error{background:var(--exam)}
+.settings-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:14px 16px;margin:0 20px 10px}
+.settings-card-title{font-size:13px;font-weight:500;margin-bottom:12px}
+.settings-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.settings-row:last-child{margin-bottom:0}
+.settings-key{font-size:12px;color:var(--ink2)}
+.settings-val-input{border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--ink);background:var(--paper);width:140px;font-family:inherit;text-align:right}
+.settings-val-input:focus{outline:none;border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="sync-bar" class="sync-bar"></div>
+
+<div id="login-screen">
+  <div class="login-logo">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+      <rect x="6" y="4" width="24" height="28" rx="3" stroke="#4A7C6F" stroke-width="1.5"/>
+      <line x1="11" y1="12" x2="25" y2="12" stroke="#4A7C6F" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="11" y1="17" x2="25" y2="17" stroke="#4A7C6F" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="11" y1="22" x2="19" y2="22" stroke="#4A7C6F" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="login-title">教師手帳</div>
+  <div class="login-sub">課程進度・會議行程・學期總覽<br>一個 App 全部搞定</div>
+  <button class="login-btn" id="login-btn">
+    <svg width="18" height="18" viewBox="0 0 18 18">
+      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+      <path d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+    </svg>
+    使用 Google 帳號登入
+  </button>
+  <div class="login-note">登入後資料儲存於你的 Google Drive<br>本 App 僅存取由它自己建立的檔案</div>
+</div>
+
+<div id="app">
+  <div id="page-overview" class="page active">
+    <div class="page-header">
+      <div class="page-header-jp" id="overview-jp"></div>
+      <div class="page-header-title">課程進度總覽</div>
+      <div class="page-header-sub" id="overview-sub"></div>
+    </div>
+    <div class="section-label">學期概況</div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num" id="stat-weeks" style="color:var(--accent)">—</div><div class="stat-lbl">剩餘週數</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-exam-days" style="color:var(--exam)">—</div><div class="stat-lbl">距下次段考</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-taught" style="color:var(--ink2)">—</div><div class="stat-lbl">已上總堂數</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-total" style="color:var(--ink2)">—</div><div class="stat-lbl">學期總堂數</div></div>
+    </div>
+    <div class="section-label">各科進度</div>
+    <div class="course-list" id="course-list"></div>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="page-calendar" class="page">
+    <div class="page-header">
+      <div class="page-header-jp" id="cal-jp"></div>
+      <div class="page-header-title" id="cal-title">行事曆</div>
+    </div>
+    <div class="cal-controls">
+      <button class="cal-nav" id="cal-prev">‹</button>
+      <div class="cal-month-label" id="cal-month-label"></div>
+      <button class="cal-nav" id="cal-next">›</button>
+      <div class="view-toggle">
+        <button class="view-btn active" id="btn-month">月</button>
+        <button class="view-btn" id="btn-week">週</button>
+      </div>
+    </div>
+    <div id="cal-body"></div>
+    <div id="cal-selected-events"></div>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="page-record" class="page">
+    <div class="page-header">
+      <div class="page-header-jp" id="record-jp">今日記錄</div>
+      <div class="page-header-title" id="record-date-title"></div>
+      <div class="page-header-sub">記錄每門課上到哪裡</div>
+    </div>
+    <div class="section-label">選擇日期</div>
+    <div style="padding:0 20px 8px"><input type="date" class="record-input" id="record-date-picker"></div>
+    <div class="section-label">課程進度</div>
+    <div class="record-list" id="record-list"></div>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="page-meetings" class="page">
+    <div class="page-header">
+      <div class="page-header-jp">會議・特殊日期</div>
+      <div class="page-header-title">會議行程</div>
+    </div>
+    <div class="section-label">即將到來</div>
+    <div class="meeting-list" id="meeting-list"></div>
+    <div style="height:12px"></div>
+    <button class="add-meeting-btn" id="add-meeting-btn">＋ 新增會議或特殊日期</button>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="page-settings" class="page">
+    <div class="page-header">
+      <div class="page-header-jp">學期設定</div>
+      <div class="page-header-title">設定</div>
+    </div>
+    <div class="section-label">學期資訊</div>
+    <div class="settings-card">
+      <div class="settings-card-title">學期起訖</div>
+      <div class="settings-row"><div class="settings-key">學期開始</div><input type="date" class="settings-val-input" id="set-start"></div>
+      <div class="settings-row"><div class="settings-key">學期結束</div><input type="date" class="settings-val-input" id="set-end"></div>
+    </div>
+    <div class="section-label">課程設定</div>
+    <div class="settings-card">
+      <div id="course-settings-rows"></div>
+      <button class="save-btn" style="margin-top:8px" id="add-course-btn">＋ 新增課程</button>
+    </div>
+    <div style="padding:0 20px 8px"><button class="save-btn" id="save-settings-btn">儲存所有設定</button></div>
+    <div style="padding:0 20px"><button id="logout-btn" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--border);background:white;font-size:13px;color:var(--ink2);cursor:pointer;font-family:inherit">登出 Google 帳號</button></div>
+    <div style="height:16px"></div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active" id="nav-overview">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="12" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="12" width="7" height="7" rx="1.5"/><rect x="12" y="12" width="7" height="7" rx="1.5"/></svg>
+      <div class="nav-label">總覽</div>
+    </div>
+    <div class="nav-item" id="nav-calendar">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="16" height="15" rx="2"/><line x1="7" y1="2" x2="7" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/><line x1="3" y1="9" x2="19" y2="9"/></svg>
+      <div class="nav-label">行事曆</div>
+    </div>
+    <div class="nav-item" id="nav-record">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h14M4 11h10M4 16h7"/></svg>
+      <div class="nav-label">記錄</div>
+    </div>
+    <div class="nav-item" id="nav-meetings">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H3a1 1 0 00-1 1v10a1 1 0 001 1h5l3 3 3-3h5a1 1 0 001-1V5a1 1 0 00-1-1z"/></svg>
+      <div class="nav-label">會議</div>
+    </div>
+    <div class="nav-item" id="nav-settings">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="3"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.22 4.22l1.42 1.42M16.36 16.36l1.42 1.42M4.22 17.78l1.42-1.42M16.36 5.64l1.42-1.42"/></svg>
+      <div class="nav-label">設定</div>
+    </div>
+  </nav>
+
+  <div class="modal-overlay" id="meeting-modal">
+    <div class="modal-sheet">
+      <div class="modal-title">新增行程</div>
+      <div class="modal-field"><div class="modal-label">類型</div>
+        <select class="modal-input" id="modal-type">
+          <option value="meeting">會議</option>
+          <option value="exam">段考</option>
+          <option value="holiday">假期／特殊日期</option>
+        </select>
+      </div>
+      <div class="modal-field"><div class="modal-label">名稱</div><input type="text" class="modal-input" id="modal-title-input" placeholder="例：教學研討會" maxlength="50"></div>
+      <div class="modal-field"><div class="modal-label">日期</div><input type="date" class="modal-input" id="modal-date"></div>
+      <div class="modal-field"><div class="modal-label">時間（選填）</div><input type="time" class="modal-input" id="modal-time"></div>
+      <div class="modal-field"><div class="modal-label">地點／備註（選填）</div><input type="text" class="modal-input" id="modal-note" placeholder="例：會議室B" maxlength="100"></div>
+      <div class="modal-btns">
+        <button class="modal-cancel" id="modal-cancel-btn">取消</button>
+        <button class="modal-save" id="modal-save-btn">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  ★ 請將下方 YOUR_CLIENT_ID_HERE 換成你的用戶端 ID
+// ════════════════════════════════════════════════
+const CLIENT_ID = '447764271429-mndkpnvh5rqe9ve8o1uhjcpdo3id7s77.apps.googleusercontent.com';
+// ════════════════════════════════════════════════
+
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+
+// ✅ 風險四修正：白名單驗證，只允許固定的類型值
+const VALID_TYPES = new Set(['meeting','exam','holiday']);
+
+// ✅ 安全的 DOM 建立輔助函式
+// 第三輪修正：改用白名單 + setAttribute，並明確擋掉所有 on* 事件屬性
+const ALLOWED_PROPS = new Set(['type','id','placeholder','min','max','step','maxlength','rows','checked','disabled','readonly','for','name','multiple','accept','autocomplete','inputmode']);
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  Object.entries(props).forEach(([k, v]) => {
+    if (k.startsWith('on')) return;
+    if (k === 'class') { e.className = v; return; }
+    if (k === 'style') { e.style.cssText = v; return; }
+    if (k.startsWith('data-')) { e.dataset[k.slice(5)] = v; return; }
+    if (ALLOWED_PROPS.has(k)) { e.setAttribute(k, v); return; }
+  });
+  children.forEach(c => {
+    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+    else if (c) e.appendChild(c);
+  });
+  return e;
+}
+
+let appData = {
+  settings: {
+    semesterStart:'', semesterEnd:'',
+    courses:[
+      {id:'c1',name:'高一甲 國文',color:'#4A7C6F',totalLessons:18},
+      {id:'c2',name:'高二乙 英文',color:'#5A6A8B',totalLessons:18},
+      {id:'c3',name:'高三甲 數學',color:'#8B6A3A',totalLessons:18},
+      {id:'c4',name:'高二丙 物理',color:'#6A3A8B',totalLessons:16},
+      {id:'c5',name:'高一乙 國文',color:'#3A7A8B',totalLessons:18}
+    ]
+  },
+  progress: {},
+  meetings: []
+};
+let fileIds = {settings:null, progress:null, meetings:null};
+let tokenClient = null, gapiOk = false, gisOk = false;
+let calView = 'month', calYear, calMonth;
+
+// ── 初始化：用 addEventListener 取代 inline onclick ──
+window.addEventListener('DOMContentLoaded', () => {
+  const t = new Date(); calYear = t.getFullYear(); calMonth = t.getMonth();
+
+  // 綁定所有按鈕事件（✅ 移除所有 HTML 內的 onclick，避免 CSP 問題）
+  document.getElementById('login-btn').addEventListener('click', handleLogin);
+  document.getElementById('logout-btn').addEventListener('click', handleLogout);
+  document.getElementById('cal-prev').addEventListener('click', () => calNavigate(-1));
+  document.getElementById('cal-next').addEventListener('click', () => calNavigate(1));
+  document.getElementById('btn-month').addEventListener('click', () => setCalView('month'));
+  document.getElementById('btn-week').addEventListener('click', () => setCalView('week'));
+  document.getElementById('add-meeting-btn').addEventListener('click', openMeetingModal);
+  document.getElementById('modal-cancel-btn').addEventListener('click', closeMeetingModal);
+  document.getElementById('modal-save-btn').addEventListener('click', saveMeeting);
+  document.getElementById('add-course-btn').addEventListener('click', addCourse);
+  document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+  document.getElementById('record-date-picker').addEventListener('change', e => loadRecordForDate(e.target.value));
+
+  ['overview','calendar','record','meetings','settings'].forEach(name => {
+    document.getElementById('nav-'+name).addEventListener('click', () => switchPage(name));
+  });
+
+  loadGapi();
+});
+
+function loadGapi() {
+  const s1 = document.createElement('script');
+  s1.src = 'https://apis.google.com/js/api.js';
+  s1.addEventListener('load', gapiLoad);
+  document.head.appendChild(s1);
+  const s2 = document.createElement('script');
+  s2.src = 'https://accounts.google.com/gsi/client';
+  s2.addEventListener('load', gisLoad);
+  document.head.appendChild(s2);
+}
+
+function gapiLoad() {
+  gapi.load('client', async () => {
+    await gapi.client.init({discoveryDocs:[DISCOVERY]});
+    gapiOk = true; tryAutoLogin();
+  });
+}
+function gisLoad() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES,
+    callback: async r => {
+      if (r.error) { showSync('登入失敗，請重試', true); return; }
+      await onSignedIn();
+    }
+  });
+  gisOk = true; tryAutoLogin();
+}
+function tryAutoLogin() {
+  if (!gapiOk || !gisOk) return;
+  if (sessionStorage.getItem('ta_ok') === '1') tokenClient.requestAccessToken({prompt:''});
+}
+function handleLogin() {
+  if (!gapiOk || !gisOk) { showSync('初始化中，請稍後', true); return; }
+  tokenClient.requestAccessToken({prompt:'consent'});
+}
+async function onSignedIn() {
+  sessionStorage.setItem('ta_ok', '1');
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  showSync('載入資料中…');
+  await loadAll();
+  hideSync();
+  renderAll();
+}
+function handleLogout() {
+  if (!confirm('確定要登出嗎？')) return;
+  const tok = gapi.client.getToken();
+  if (tok) google.accounts.oauth2.revoke(tok.access_token, () => {});
+  gapi.client.setToken(null);
+  sessionStorage.removeItem('ta_ok');
+  document.getElementById('app').classList.remove('active');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function showSync(msg, err=false) {
+  const b = document.getElementById('sync-bar');
+  // ✅ textContent 而非 innerHTML，防止訊息文字被當 HTML 執行
+  b.textContent = msg;
+  b.className = 'sync-bar show' + (err ? ' error' : '');
+  if (err) setTimeout(() => b.classList.remove('show'), 3000);
+}
+function hideSync() { document.getElementById('sync-bar').classList.remove('show'); }
+
+async function findOrCreate(name) {
+  try {
+    const r = await gapi.client.drive.files.list({
+      q: `name='${name}' and trashed=false`, spaces:'drive', fields:'files(id)'
+    });
+    if (r.result.files.length > 0) return r.result.files[0].id;
+    const c = await gapi.client.request({
+      path: 'https://www.googleapis.com/upload/drive/v3/files',
+      method: 'POST', params: {uploadType:'multipart'},
+      headers: {'Content-Type':'multipart/related; boundary=ta_bound'},
+      body: '--ta_bound\r\nContent-Type: application/json\r\n\r\n' +
+        JSON.stringify({name, mimeType:'application/json'}) +
+        '\r\n--ta_bound\r\nContent-Type: application/json\r\n\r\n{}\r\n--ta_bound--'
+    });
+    return c.result.id;
+  } catch(e) { console.error(e); return null; }
+}
+async function readFile(id) {
+  try { const r = await gapi.client.drive.files.get({fileId:id, alt:'media'}); return r.result; }
+  catch(e) { return null; }
+}
+async function writeFile(id, data) {
+  try {
+    await gapi.client.request({
+      path: `https://www.googleapis.com/upload/drive/v3/files/${id}`,
+      method: 'PATCH', params: {uploadType:'media'},
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+  } catch(e) { showSync('儲存失敗，請檢查網路', true); }
+}
+// ✅ 修正二：從 Drive 讀回的資料加上欄位驗證與長度限制清洗
+function sanitizeStr(v, maxLen=200) {
+  return typeof v === 'string' ? v.slice(0, maxLen) : '';
+}
+function sanitizeSettings(s) {
+  if (!s || !Array.isArray(s.courses)) return null;
+  return {
+    semesterStart: sanitizeStr(s.semesterStart, 10),
+    semesterEnd:   sanitizeStr(s.semesterEnd, 10),
+    courses: s.courses.slice(0, 20).map(c => ({
+      id:           sanitizeStr(c.id, 50),
+      name:         sanitizeStr(c.name, 50),
+      color:        /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(c.color) ? c.color : '#888780', // ✅ 支援 3碼與6碼
+      totalLessons: Math.min(Math.max(parseInt(c.totalLessons)||0, 0), 999)
+    }))
+  };
+}
+function sanitizeMeetings(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.slice(0, 500).map(m => ({
+    id:    sanitizeStr(m.id, 50),
+    type:  VALID_TYPES.has(m.type) ? m.type : 'meeting', // ✅ 白名單
+    title: sanitizeStr(m.title, 100),
+    date:  /^\d{4}-\d{2}-\d{2}$/.test(m.date) ? m.date : '', // ✅ 日期格式驗證
+    time:  /^\d{2}:\d{2}$/.test(m.time||'') ? m.time : '',
+    note:  sanitizeStr(m.note, 200)
+  })).filter(m => m.date); // 日期格式不對的直接丟棄
+}
+function sanitizeProgress(p) {
+  if (!p || typeof p !== 'object') return {};
+  const out = {};
+  Object.keys(p).slice(0, 5000).forEach(date => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return; // ✅ 日期 key 格式驗證
+    out[date] = {};
+    const day = p[date];
+    if (typeof day === 'object') {
+      Object.keys(day).slice(0, 50).forEach(cid => {
+        out[date][sanitizeStr(cid,50)] = {
+          content: sanitizeStr(day[cid]?.content, 500),
+          note:    sanitizeStr(day[cid]?.note, 500)
+        };
+      });
+    }
+  });
+  return out;
+}
+
+async function loadAll() {
+  fileIds.settings = await findOrCreate('teacher-app-settings.json');
+  fileIds.progress = await findOrCreate('teacher-app-progress.json');
+  fileIds.meetings = await findOrCreate('teacher-app-meetings.json');
+  const s = await readFile(fileIds.settings);
+  const cleanS = sanitizeSettings(s);
+  if (cleanS) appData.settings = cleanS; // ✅ 驗證後才使用
+  const p = await readFile(fileIds.progress);
+  appData.progress = sanitizeProgress(p); // ✅ 驗證後才使用
+  const m = await readFile(fileIds.meetings);
+  appData.meetings = sanitizeMeetings(m); // ✅ 驗證後才使用
+}
+// ✅ 第三輪修正：saveData 前先讀取雲端最新版本進行合併，防止多裝置資料覆寫
+// 合併策略：meetings 以 id 去重合併；progress 以日期 key 合併本地優先；settings 本地優先
+async function mergeAndSave(type) {
+  showSync('同步中…');
+  const id = fileIds[type];
+  if (!id) { hideSync(); return; }
+  try {
+    const remote = await readFile(id);
+    if (type === 'meetings') {
+      const remoteClean = sanitizeMeetings(remote);
+      const localIds = new Set(appData.meetings.map(m => m.id));
+      const remoteOnly = remoteClean.filter(m => !localIds.has(m.id));
+      const merged = [...appData.meetings, ...remoteOnly]
+        .sort((a,b) => new Date(a.date) - new Date(b.date));
+      appData.meetings = merged;
+      await writeFile(id, merged);
+    } else if (type === 'progress') {
+      const remoteClean = sanitizeProgress(remote);
+      const merged = Object.assign({}, remoteClean, appData.progress);
+      appData.progress = merged;
+      await writeFile(id, merged);
+    } else {
+      await writeFile(id, appData.settings);
+    }
+  } catch(e) {
+    const map = {settings:appData.settings, progress:appData.progress, meetings:appData.meetings};
+    await writeFile(fileIds[type], map[type]);
+  }
+  hideSync();
+}
+async function saveData(type) { await mergeAndSave(type); }
+
+// ✅ 修正三：VALID_PAGES 白名單，防止任意字串被用來組成 DOM ID
+const VALID_PAGES = new Set(['overview','calendar','record','meetings','settings']);
+function switchPage(name) {
+  if (!VALID_PAGES.has(name)) return; // ✅ 白名單過濾
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  if (name === 'record') initRecord();
+  if (name === 'calendar') renderCal();
+  if (name === 'settings') renderSettings();
+}
+function renderAll() { renderOverview(); renderMeetings(); renderCal(); initRecord(); }
+
+function reiwa(y) { return y - 2018; }
+function todayStr() { const t=new Date(); return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`; }
+function pad(n) { return String(n).padStart(2,'0'); }
+function ds(y,m,d) { return `${y}-${pad(m+1)}-${pad(d)}`; }
+function evOn(date) { return appData.meetings.filter(e => e.date === date); }
+
+// ── 總覽頁：✅ 全用 DOM API，不用 innerHTML 拼接使用者資料 ──
+function renderOverview() {
+  const t = new Date(); const today = new Date(t); today.setHours(0,0,0,0);
+  document.getElementById('overview-jp').textContent = `令和${reiwa(t.getFullYear())}年`;
+  document.getElementById('overview-sub').textContent = t.toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'long'});
+  const s = appData.settings;
+  if (s.semesterEnd) {
+    const w = Math.max(0, Math.ceil((new Date(s.semesterEnd)-today)/(7*864e5)));
+    document.getElementById('stat-weeks').textContent = w;
+  }
+  const up = appData.meetings
+    .filter(m => m.type === 'exam' && new Date(m.date) >= today)
+    .sort((a,b) => new Date(a.date)-new Date(b.date));
+  document.getElementById('stat-exam-days').textContent = up.length > 0
+    ? Math.ceil((new Date(up[0].date)-today)/864e5)+'天' : '—';
+  let total=0, taught=0;
+  s.courses.forEach(c => {
+    total += c.totalLessons || 0;
+    taught += Object.values(appData.progress).filter(d => d[c.id]?.content?.trim()).length;
+  });
+  document.getElementById('stat-taught').textContent = taught;
+  document.getElementById('stat-total').textContent = total;
+
+  const cl = document.getElementById('course-list');
+  cl.innerHTML = '';
+  s.courses.forEach(c => {
+    const cnt = Object.values(appData.progress).filter(d => d[c.id]?.content?.trim()).length;
+    const tot = c.totalLessons || 0;
+    const rem = tot - cnt;
+    const pct = tot > 0 ? Math.round(cnt/tot*100) : 0;
+    const dates = Object.keys(appData.progress).filter(d => appData.progress[d][c.id]?.content?.trim()).sort().reverse();
+    const last = dates.length > 0 ? appData.progress[dates[0]][c.id].content : '尚無記錄';
+    const bc = rem<=4?'var(--exam)':rem<=8?'var(--holiday)':'var(--accent)';
+    const bb = rem<=4?'var(--exam-light)':rem<=8?'var(--holiday-light)':'var(--accent-light)';
+
+    // ✅ 用 DOM API 建立卡片，所有文字用 textContent 設定
+    const card = el('div', {class:'course-card'});
+    card.addEventListener('click', () => switchPage('record'));
+
+    const top = el('div', {class:'course-top'});
+    const nameDiv = el('div', {class:'course-name'});
+    const dot = el('div', {class:'course-dot', style:`background:${c.color}`});
+    nameDiv.appendChild(dot);
+    nameDiv.appendChild(document.createTextNode(c.name)); // ✅ textContent
+    const countDiv = el('div', {class:'course-count'});
+    countDiv.appendChild(document.createTextNode('已上 '));
+    countDiv.appendChild(el('span', {}, [String(cnt)]));
+    countDiv.appendChild(document.createTextNode(` / ${tot} 堂`));
+    top.appendChild(nameDiv); top.appendChild(countDiv);
+
+    const track = el('div', {class:'progress-track'});
+    track.appendChild(el('div', {class:'progress-fill', style:`width:${pct}%;background:${c.color}`}));
+
+    const bottom = el('div', {class:'course-bottom'});
+    const lastDiv = el('div', {class:'course-last'});
+    lastDiv.textContent = last; // ✅ textContent
+    const badge = el('div', {class:'course-badge', style:`background:${bb};color:${bc}`});
+    badge.textContent = `剩 ${rem} 堂`; // ✅ textContent
+    bottom.appendChild(lastDiv); bottom.appendChild(badge);
+
+    card.appendChild(top); card.appendChild(track); card.appendChild(bottom);
+    cl.appendChild(card);
+  });
+}
+
+// ── 行事曆 ──
+function calNavigate(d) {
+  if (calView==='month') {
+    calMonth += d;
+    if (calMonth>11){calMonth=0;calYear++;}
+    if (calMonth<0){calMonth=11;calYear--;}
+  } else {
+    const dt = new Date(calYear,calMonth,1); dt.setDate(dt.getDate()+d*7);
+    calYear=dt.getFullYear(); calMonth=dt.getMonth();
+  }
+  renderCal();
+}
+function setCalView(v) {
+  calView = v;
+  document.getElementById('btn-month').classList.toggle('active', v==='month');
+  document.getElementById('btn-week').classList.toggle('active', v==='week');
+  renderCal();
+}
+function renderCal() {
+  const MN=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const DN=['日','一','二','三','四','五','六'];
+  document.getElementById('cal-jp').textContent = `令和${reiwa(calYear)}年`;
+  document.getElementById('cal-title').textContent = `${calYear}年 ${MN[calMonth]}`;
+  document.getElementById('cal-month-label').textContent = `${calYear} / ${MN[calMonth]}`;
+  const td = todayStr(); const body = document.getElementById('cal-body');
+  body.innerHTML = ''; document.getElementById('cal-selected-events').innerHTML = '';
+
+  if (calView === 'month') {
+    const first = new Date(calYear,calMonth,1).getDay();
+    const days = new Date(calYear,calMonth+1,0).getDate();
+    const prev = new Date(calYear,calMonth,0).getDate();
+
+    const head = el('div', {class:'cal-grid-head'});
+    DN.forEach(d => { const h=el('div',{class:'cal-dh'}); h.textContent=d; head.appendChild(h); });
+    body.appendChild(head);
+
+    const grid = el('div', {class:'cal-grid'});
+    for (let i=0; i<first; i++) {
+      const pm=calMonth===0?11:calMonth-1, py=calMonth===0?calYear-1:calYear;
+      grid.appendChild(buildDayCell(ds(py,pm,prev-first+1+i), prev-first+1+i, true, td));
+    }
+    for (let d=1; d<=days; d++) grid.appendChild(buildDayCell(ds(calYear,calMonth,d), d, false, td));
+    const rem=(7-(first+days)%7)%7;
+    for (let d=1; d<=rem; d++) {
+      const nm=calMonth===11?0:calMonth+1, ny=calMonth===11?calYear+1:calYear;
+      grid.appendChild(buildDayCell(ds(ny,nm,d), d, true, td));
+    }
+    body.appendChild(grid);
+  } else {
+    const base=new Date(calYear,calMonth,1); base.setDate(base.getDate()-base.getDay());
+    const wrap = el('div',{class:'week-view'});
+    for (let i=0; i<7; i++) {
+      const d=new Date(base); d.setDate(base.getDate()+i);
+      const dstr=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const block = el('div',{class:'week-day-block'});
+      const lbl = el('div',{class:'week-day-label'+(dstr===td?' today-label':'')});
+      lbl.textContent = `${DN[d.getDay()]}　${d.getMonth()+1}/${d.getDate()}`; // ✅ textContent
+      block.appendChild(lbl);
+      const evs = evOn(dstr);
+      if (!evs.length) {
+        const emp=el('div',{class:'empty-state'}); emp.textContent='無行程'; block.appendChild(emp);
+      } else { evs.forEach(e => block.appendChild(buildEvCard(e))); }
+      wrap.appendChild(block);
+    }
+    body.appendChild(wrap);
+  }
+}
+
+// ✅ 用 DOM API 建立日期格，textContent 設定所有文字
+function buildDayCell(dstr, num, other, td) {
+  const dow = new Date(dstr+'T00:00:00').getDay();
+  const cell = el('div',{class:'cal-day'});
+  cell.addEventListener('click', () => showDay(dstr));
+  const numDiv = el('div',{class:'cal-day-num '+(dstr===td?'today':other?'other':dow===0?'sun':'')});
+  numDiv.textContent = num;
+  cell.appendChild(numDiv);
+  evOn(dstr).slice(0,2).forEach(e => {
+    const safeType = VALID_TYPES.has(e.type) ? e.type : 'meeting'; // ✅ 白名單
+    const ev = el('div',{class:`cal-ev ${safeType}`});
+    ev.textContent = e.title; // ✅ textContent
+    cell.appendChild(ev);
+  });
+  return cell;
+}
+
+function showDay(dstr) {
+  const evs = evOn(dstr); const c = document.getElementById('cal-selected-events');
+  c.innerHTML = '';
+  if (!evs.length) return;
+  const d = new Date(dstr+'T00:00:00');
+  const sec = el('div',{class:'selected-date-section'});
+  const title = el('div',{class:'selected-date-title'});
+  title.textContent = `${d.getMonth()+1}月${d.getDate()}日 的行程`; // ✅ textContent
+  sec.appendChild(title);
+  evs.forEach(e => sec.appendChild(buildEvCard(e)));
+  c.appendChild(sec);
+}
+
+// ✅ 用 DOM API 建立事件卡片
+function buildEvCard(e) {
+  const safeType = VALID_TYPES.has(e.type) ? e.type : 'meeting'; // ✅ 白名單驗證
+  const bc = safeType==='meeting'?'var(--meet)':safeType==='exam'?'var(--exam)':'var(--holiday)';
+  const tl = safeType==='meeting'?'會議':safeType==='exam'?'段考':'特殊日期';
+  const card = el('div',{class:'week-ev-card'});
+  const bar = el('div',{class:'week-ev-bar',style:`background:${bc}`});
+  const body = el('div',{class:'week-ev-body'});
+  const typeDiv = el('div',{class:'week-ev-type'}); typeDiv.textContent = tl;
+  const titleDiv = el('div',{class:'week-ev-title'}); titleDiv.textContent = e.title; // ✅
+  const metaDiv = el('div',{class:'week-ev-meta'});
+  metaDiv.textContent = (e.time||'') + (e.note?' · '+e.note:''); // ✅
+  body.appendChild(typeDiv); body.appendChild(titleDiv); body.appendChild(metaDiv);
+  card.appendChild(bar); card.appendChild(body);
+  return card;
+}
+
+// ── 記錄頁：✅ DOM API 取代 innerHTML 拼接 ──
+function initRecord() {
+  const t=new Date(); const v=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  const pk=document.getElementById('record-date-picker');
+  if (!pk.value) pk.value=v;
+  loadRecordForDate(pk.value);
+}
+function loadRecordForDate(dstr) {
+  const d = new Date(dstr+'T00:00:00');
+  document.getElementById('record-jp').textContent = `令和${reiwa(d.getFullYear())}年`;
+  document.getElementById('record-date-title').textContent = d.toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'long'});
+  const day=appData.progress[dstr]||{};
+  const cl=document.getElementById('record-list'); cl.innerHTML='';
+  appData.settings.courses.forEach(c => {
+    const r=day[c.id]||{content:'',note:''};
+    const card=el('div',{class:'record-card'});
+    const nameDiv=el('div',{class:'record-course-name'});
+    nameDiv.appendChild(el('div',{class:'course-dot',style:`background:${c.color}`}));
+    nameDiv.appendChild(document.createTextNode(c.name)); // ✅
+    const f1=el('div',{class:'record-field'});
+    const l1=el('div',{class:'record-label'}); l1.textContent='上課內容';
+    const inp=el('input',{type:'text', class:'record-input', id:`rc-${c.id}`, placeholder:'例：第三課 赤壁賦'});
+    inp.value=r.content; // ✅ .value 不會執行 HTML
+    f1.appendChild(l1); f1.appendChild(inp);
+    const f2=el('div',{class:'record-field'});
+    const l2=el('div',{class:'record-label'}); l2.textContent='備註（選填）';
+    const ta=el('textarea',{class:'record-input', id:`rn-${c.id}`, placeholder:'例：下次需複習'});
+    ta.value=r.note; // ✅
+    f2.appendChild(l2); f2.appendChild(ta);
+    card.appendChild(nameDiv); card.appendChild(f1); card.appendChild(f2);
+    cl.appendChild(card);
+  });
+  const btn=el('button',{class:'save-btn'});
+  btn.textContent='儲存今日進度';
+  btn.addEventListener('click', () => saveRecord(dstr)); // ✅ 不用 onclick 字串
+  cl.appendChild(btn);
+}
+async function saveRecord(dstr) {
+  if (!appData.progress[dstr]) appData.progress[dstr]={};
+  appData.settings.courses.forEach(c => {
+    appData.progress[dstr][c.id]={
+      content: document.getElementById('rc-'+c.id)?.value||'',
+      note: document.getElementById('rn-'+c.id)?.value||''
+    };
+  });
+  await saveData('progress'); renderOverview();
+}
+
+// ── 會議頁：✅ DOM API 取代 innerHTML ──
+function renderMeetings() {
+  const td=new Date(); td.setHours(0,0,0,0);
+  const sorted=[...appData.meetings].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const up=sorted.filter(m=>new Date(m.date+'T00:00:00')>=td);
+  const ps=sorted.filter(m=>new Date(m.date+'T00:00:00')<td);
+  const l=document.getElementById('meeting-list'); l.innerHTML='';
+  if (!up.length&&!ps.length) {
+    const emp=el('div',{class:'empty-state',style:'padding:20px'});
+    emp.textContent='尚無會議或特殊日期'; l.appendChild(emp); return;
+  }
+  up.forEach(m => l.appendChild(buildMeetCard(m)));
+  if (ps.length) {
+    const lbl=el('div',{class:'section-label',style:'padding-top:8px'});
+    lbl.textContent='過去記錄'; l.appendChild(lbl);
+    ps.slice(-5).reverse().forEach(m => l.appendChild(buildMeetCard(m,true)));
+  }
+}
+
+// ✅ 用 DOM API 建立會議卡片
+function buildMeetCard(m, past=false) {
+  const safeType = VALID_TYPES.has(m.type) ? m.type : 'meeting'; // ✅ 白名單
+  const d=new Date(m.date+'T00:00:00');
+  const dl=d.toLocaleDateString('zh-TW',{month:'long',day:'numeric',weekday:'short'});
+  const tl=safeType==='meeting'?'會議':safeType==='exam'?'段考':'特殊日期';
+  const card=el('div',{class:'meeting-card'});
+  if (past) card.style.opacity='0.5';
+  const bar=el('div',{class:`meeting-bar ${safeType}`});
+  const body=el('div',{class:'meeting-body'});
+  const badge=el('div',{class:`meeting-type-badge ${safeType}`}); badge.textContent=tl;
+  const titleDiv=el('div',{class:'meeting-title'}); titleDiv.textContent=m.title; // ✅
+  const meta=el('div',{class:'meeting-meta'});
+  meta.textContent=dl+(m.time?' · '+m.time:'')+(m.note?' · '+m.note:''); // ✅
+  body.appendChild(badge); body.appendChild(titleDiv); body.appendChild(meta);
+  const delBtn=el('button',{class:'meeting-delete'});
+  delBtn.textContent='×';
+  delBtn.addEventListener('click', () => deleteMeeting(m.id)); // ✅ 不用 onclick 字串
+  card.appendChild(bar); card.appendChild(body); card.appendChild(delBtn);
+  return card;
+}
+
+function openMeetingModal() {
+  const t=new Date();
+  document.getElementById('modal-date').value=`${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  ['modal-title-input','modal-time','modal-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('meeting-modal').classList.add('open');
+}
+function closeMeetingModal() { document.getElementById('meeting-modal').classList.remove('open'); }
+async function saveMeeting() {
+  const title=document.getElementById('modal-title-input').value.trim();
+  const date=document.getElementById('modal-date').value;
+  const rawType=document.getElementById('modal-type').value;
+  if (!title||!date) { alert('請填寫名稱和日期'); return; }
+  const safeType = VALID_TYPES.has(rawType) ? rawType : 'meeting'; // ✅ 白名單
+  appData.meetings.push({
+    id: Date.now().toString(),
+    type: safeType, title, date,
+    time: document.getElementById('modal-time').value,
+    note: document.getElementById('modal-note').value.trim()
+  });
+  closeMeetingModal(); await saveData('meetings');
+  renderMeetings(); renderOverview(); renderCal();
+}
+async function deleteMeeting(id) {
+  if (!confirm('確定要刪除這筆行程嗎？')) return;
+  appData.meetings=appData.meetings.filter(m=>m.id!==id);
+  await saveData('meetings'); renderMeetings(); renderOverview(); renderCal();
+}
+
+// ── 設定頁：✅ DOM API 取代 innerHTML ──
+function renderSettings() {
+  document.getElementById('set-start').value=appData.settings.semesterStart||'';
+  document.getElementById('set-end').value=appData.settings.semesterEnd||'';
+  renderCourseRows();
+}
+function renderCourseRows() {
+  const r=document.getElementById('course-settings-rows'); r.innerHTML='';
+  appData.settings.courses.forEach((c,i) => {
+    const wrap=el('div',{style:'border-bottom:0.5px solid var(--divider);padding-bottom:12px;margin-bottom:12px'});
+    // 課程名稱
+    const r1=el('div',{class:'settings-row'});
+    const k1=el('div',{class:'settings-key'}); k1.textContent='課程名稱';
+    const inp=el('input',{type:'text',class:'settings-val-input',style:'text-align:left;width:160px'});
+    inp.value=c.name; // ✅
+    inp.addEventListener('change', () => { appData.settings.courses[i].name=inp.value; });
+    r1.appendChild(k1); r1.appendChild(inp);
+    // 總堂數
+    const r2=el('div',{class:'settings-row'});
+    const k2=el('div',{class:'settings-key'}); k2.textContent='總堂數';
+    const inp2=el('input',{type:'number',class:'settings-val-input'});
+    inp2.value=c.totalLessons;
+    inp2.addEventListener('change', () => { appData.settings.courses[i].totalLessons=parseInt(inp2.value)||0; });
+    r2.appendChild(k2); r2.appendChild(inp2);
+    // 顏色
+    const r3=el('div',{class:'settings-row'});
+    const k3=el('div',{class:'settings-key'}); k3.textContent='顏色';
+    const inp3=el('input',{type:'color',style:'width:40px;height:28px;border:none;background:none;cursor:pointer'});
+    inp3.value=c.color;
+    inp3.addEventListener('change', () => { appData.settings.courses[i].color=inp3.value; });
+    r3.appendChild(k3); r3.appendChild(inp3);
+    // 刪除按鈕
+    const delBtn=el('button',{style:'font-size:11px;color:var(--exam);background:none;border:none;cursor:pointer;padding-top:4px'});
+    delBtn.textContent='刪除這門課';
+    delBtn.addEventListener('click', () => delCourse(i)); // ✅
+    wrap.appendChild(r1); wrap.appendChild(r2); wrap.appendChild(r3); wrap.appendChild(delBtn);
+    r.appendChild(wrap);
+  });
+}
+function addCourse() {
+  appData.settings.courses.push({id:'c'+Date.now(),name:'新課程',color:'#888780',totalLessons:18});
+  renderCourseRows();
+}
+function delCourse(i) {
+  if (!confirm('確定要刪除這門課嗎？')) return;
+  appData.settings.courses.splice(i,1); renderCourseRows();
+}
+async function saveSettings() {
+  appData.settings.semesterStart=document.getElementById('set-start').value;
+  appData.settings.semesterEnd=document.getElementById('set-end').value;
+  await saveData('settings'); renderOverview(); alert('設定已儲存！');
+}
+</script>
+</body>
+</html>
