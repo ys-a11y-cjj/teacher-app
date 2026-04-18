@@ -142,6 +142,22 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
 .exam-cd-row:last-child{border-bottom:none}
 .exam-cd-course{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:6px}
 .exam-cd-count{font-size:13px;font-weight:500}
+.hist-card{background:white;border:0.5px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer}
+.hist-card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid var(--divider)}
+.hist-date{font-size:14px;font-weight:500;color:var(--ink)}
+.hist-weekday{font-size:11px;color:var(--ink3);letter-spacing:0.04em}
+.hist-row{display:flex;gap:7px;align-items:flex-start;padding:4px 0;font-size:12px;line-height:1.5}
+.hist-row-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.hist-row-body{flex:1;min-width:0}
+.hist-row-course{color:var(--ink2);font-weight:500;font-size:11px;margin-bottom:1px}
+.hist-row-content{color:var(--ink);word-break:break-word}
+.hist-row-note{color:var(--ink3);font-size:11px;margin-top:2px;word-break:break-word}
+.hist-empty{text-align:center;padding:32px 20px;font-size:12px;color:var(--ink3);line-height:1.8}
+.hist-filter{display:flex;flex-wrap:wrap;gap:6px;padding:0 20px 8px}
+.hist-filter-chip{font-size:11px;padding:5px 10px;border:0.5px solid var(--border);border-radius:14px;background:white;color:var(--ink2);cursor:pointer;font-family:inherit}
+.hist-filter-chip.active{background:var(--accent);border-color:var(--accent);color:white}
+.danger-btn{width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--exam);background:white;font-size:13px;color:var(--exam);cursor:pointer;font-family:inherit;font-weight:500}
+.danger-btn:active{background:var(--exam-light)}
 </style>
 </head>
 <body>
@@ -259,8 +275,6 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div style="padding:0 20px 8px">
       <button class="save-btn" id="save-timetable-btn">儲存課表</button>
     </div>
-    <div class="section-label">段考前堂數預估</div>
-    <div id="exam-countdown-list" style="padding:0 20px;display:flex;flex-direction:column;gap:10px"></div>
     <div style="height:16px"></div>
   </div>
 
@@ -273,6 +287,19 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div class="meeting-list" id="meeting-list"></div>
     <div style="height:12px"></div>
     <button class="add-meeting-btn" id="add-meeting-btn">＋ 新增會議或特殊日期</button>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="page-history" class="page">
+    <div class="page-header">
+      <div class="page-header-jp">過去進度記錄</div>
+      <div class="page-header-title">歷史記錄</div>
+      <div class="page-header-sub" id="history-sub">點擊任一日期可編輯當日內容</div>
+    </div>
+    <div class="section-label">依課程篩選</div>
+    <div class="hist-filter" id="history-filter"></div>
+    <div class="section-label" id="history-count-label">所有日期記錄</div>
+    <div id="history-list" style="padding:0 20px;display:flex;flex-direction:column;gap:10px"></div>
     <div style="height:16px"></div>
   </div>
 
@@ -291,6 +318,18 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div class="settings-card">
       <div id="course-settings-rows"></div>
       <button class="save-btn" style="margin-top:8px" id="add-course-btn">＋ 新增課程</button>
+    </div>
+    <div class="section-label">資料管理</div>
+    <div class="settings-card">
+      <div class="settings-card-title">清除過去資料</div>
+      <div style="font-size:11px;color:var(--ink3);line-height:1.7;margin-bottom:10px">可在學期結束時清除舊資料，避免 Google Drive 檔案過大。<br>此操作<b style="color:var(--exam)">無法復原</b>，建議先備份 Google Drive 上的 teacher-app-*.json 檔案。</div>
+      <div id="data-stats" style="font-size:11px;color:var(--ink2);background:var(--divider);padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7"></div>
+      <div class="settings-row"><div class="settings-key">清除此日期之前（含）</div><input type="date" class="settings-val-input" id="purge-before-date"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <button class="danger-btn" id="purge-progress-btn">清除此日期前的上課記錄</button>
+        <button class="danger-btn" id="purge-meetings-btn">清除此日期前的會議／段考</button>
+        <button class="danger-btn" id="purge-all-btn" style="border-color:var(--exam);background:var(--exam-light)">清除兩者（記錄＋會議）</button>
+      </div>
     </div>
     <div style="padding:0 20px 8px"><button class="save-btn" id="save-settings-btn">儲存所有設定</button></div>
     <div style="padding:0 20px"><button id="logout-btn" style="width:100%;padding:12px;border-radius:10px;border:0.5px solid var(--border);background:white;font-size:13px;color:var(--ink2);cursor:pointer;font-family:inherit">登出 Google 帳號</button></div>
@@ -313,6 +352,10 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
     <div class="nav-item" id="nav-record">
       <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h14M4 11h10M4 16h7"/></svg>
       <div class="nav-label">記錄</div>
+    </div>
+    <div class="nav-item" id="nav-history">
+      <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M11 6v5l3 2"/><path d="M4 11a7 7 0 0 1 7-7"/></svg>
+      <div class="nav-label">歷史</div>
     </div>
     <div class="nav-item" id="nav-meetings">
       <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 4H3a1 1 0 00-1 1v10a1 1 0 001 1h5l3 3 3-3h5a1 1 0 001-1V5a1 1 0 00-1-1z"/></svg>
@@ -398,6 +441,7 @@ let appData = {
 let fileIds = {settings:null, progress:null, meetings:null, timetable:null};
 let tokenClient = null, gapiOk = false, gisOk = false;
 let calView = 'month', calYear, calMonth;
+let authCheckTimer = null; // 用於防止「檢查登入狀態」畫面永久卡住
 
 // ── 初始化：用 addEventListener 取代 inline onclick ──
 window.addEventListener('DOMContentLoaded', () => {
@@ -415,10 +459,13 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('modal-save-btn').addEventListener('click', saveMeeting);
   document.getElementById('add-course-btn').addEventListener('click', addCourse);
   document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+  document.getElementById('purge-progress-btn').addEventListener('click', () => doPurge('progress'));
+  document.getElementById('purge-meetings-btn').addEventListener('click', () => doPurge('meetings'));
+  document.getElementById('purge-all-btn').addEventListener('click', () => doPurge('all'));
   document.getElementById('record-date-picker').addEventListener('change', e => loadRecordForDate(e.target.value));
 
   document.getElementById('save-timetable-btn').addEventListener('click', saveTimetable);
-  ['overview','calendar','timetable','record','meetings','settings'].forEach(name => {
+  ['overview','calendar','timetable','record','history','meetings','settings'].forEach(name => {
     document.getElementById('nav-'+name).addEventListener('click', () => switchPage(name));
   });
 
@@ -428,29 +475,49 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function initGapi() {
   // 等待 gapi 與 google 物件載入完成
-  const waitFor = (check, fn, ms=100, max=50) => {
+  // max=100 × 100ms = 最多等 10 秒，網路較慢時仍有機會成功
+  const waitFor = (check, fn, label, ms=100, max=100) => {
     if (check()) { fn(); return; }
-    if (max <= 0) { showSync('Google 服務載入失敗，請重新整理頁面', true); return; }
-    setTimeout(() => waitFor(check, fn, ms, max-1), ms);
+    if (max <= 0) {
+      showAuthCheck(false); // ✅ 確保 overlay 被關閉
+      document.getElementById('login-screen').style.display = 'flex';
+      showSync('Google 服務（' + label + '）載入失敗，請重新整理頁面', true);
+      return;
+    }
+    setTimeout(() => waitFor(check, fn, label, ms, max-1), ms);
   };
+
   waitFor(() => typeof gapi !== 'undefined', () => {
     gapi.load('client', async () => {
-      await gapi.client.init({discoveryDocs:[DISCOVERY]});
-      gapiOk = true;
-      tryAutoLogin();
+      try {
+        await gapi.client.init({discoveryDocs:[DISCOVERY]});
+        gapiOk = true;
+        tryAutoLogin();
+      } catch(e) {
+        showAuthCheck(false); // ✅ init 失敗時關閉 overlay
+        document.getElementById('login-screen').style.display = 'flex';
+        showSync('Google Drive 初始化失敗，請重新整理頁面', true);
+      }
     });
-  });
+  }, 'gapi');
+
   waitFor(() => typeof google !== 'undefined' && google.accounts, () => {
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
       callback: async r => {
-        if (r.error) { showSync('登入失敗，請重試', true); return; }
+        if (r.error) {
+          // 明確的 OAuth 錯誤（非靜默失敗）
+          showAuthCheck(false);
+          document.getElementById('login-screen').style.display = 'flex';
+          showSync('登入失敗，請重試', true);
+          return;
+        }
         await onSignedIn();
       }
     });
     gisOk = true;
     tryAutoLogin();
-  });
+  }, 'gsi');
 }
 
 // ── 「每日登入一次」機制 ──
@@ -498,6 +565,7 @@ function tryAutoLogin() {
 }
 
 // 檢查登入中時顯示一個靜態畫面，避免「登入畫面閃一下又消失」
+// ✅ 加上 8 秒安全逾時：若 Google 回呼永遠沒觸發，自動退回登入畫面
 function showAuthCheck(on) {
   let overlay = document.getElementById('auth-check-overlay');
   if (on) {
@@ -505,11 +573,21 @@ function showAuthCheck(on) {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'auth-check-overlay';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:var(--paper);z-index:300;font-size:13px;color:var(--ink2);letter-spacing:0.04em';
-      overlay.textContent = '檢查登入狀態…';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--paper);z-index:300;font-size:13px;color:var(--ink2);letter-spacing:0.04em;gap:12px';
+      const msg = document.createElement('div');
+      msg.textContent = '檢查登入狀態…';
+      overlay.appendChild(msg);
       document.body.appendChild(overlay);
     }
+    // 安全逾時：8 秒後若仍卡著，退回登入畫面讓使用者手動登入
+    if (authCheckTimer) clearTimeout(authCheckTimer);
+    authCheckTimer = setTimeout(() => {
+      authCheckTimer = null;
+      showAuthCheck(false);
+      document.getElementById('login-screen').style.display = 'flex';
+    }, 8000);
   } else {
+    if (authCheckTimer) { clearTimeout(authCheckTimer); authCheckTimer = null; }
     if (overlay) overlay.remove();
     // ✅ 一併移除預先注入的隱藏樣式，讓登入畫面可正常顯示
     const pre = document.getElementById('pre-auth-hide');
@@ -669,7 +747,7 @@ async function saveData(type) {
 }
 
 // ✅ 修正三：VALID_PAGES 白名單，防止任意字串被用來組成 DOM ID
-const VALID_PAGES = new Set(['overview','calendar','timetable','record','meetings','settings']);
+const VALID_PAGES = new Set(['overview','calendar','timetable','record','history','meetings','settings']);
 function switchPage(name) {
   if (!VALID_PAGES.has(name)) return; // ✅ 白名單過濾
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -680,6 +758,7 @@ function switchPage(name) {
   if (name === 'calendar') renderCal();
   if (name === 'settings') renderSettings();
   if (name === 'timetable') renderTimetable();
+  if (name === 'history') renderHistory();
 }
 function renderAll() { renderOverview(); renderMeetings(); renderCal(); initRecord(); }
 
@@ -1143,6 +1222,118 @@ async function saveRecord(dstr) {
   await saveData('progress'); renderOverview();
 }
 
+// ── 歷史記錄頁 ──
+// 顯示所有有紀錄的日期（從新到舊），點擊可跳到記錄頁編輯
+let historyFilterCourseId = null; // null = 顯示全部
+
+function renderHistory() {
+  const filterEl = document.getElementById('history-filter');
+  const listEl   = document.getElementById('history-list');
+  const labelEl  = document.getElementById('history-count-label');
+  filterEl.innerHTML = '';
+  listEl.innerHTML = '';
+
+  // 篩選 chips：全部 + 各課程
+  const chips = [{id:null, name:'全部', color:null}].concat(
+    appData.settings.courses.map(c => ({id:c.id, name:c.name, color:c.color}))
+  );
+  chips.forEach(chip => {
+    const btn = el('button', {class:'hist-filter-chip' + (historyFilterCourseId === chip.id ? ' active' : '')});
+    btn.textContent = chip.name;
+    if (chip.color && historyFilterCourseId !== chip.id) {
+      btn.style.borderColor = chip.color;
+      btn.style.color = chip.color;
+    }
+    btn.addEventListener('click', () => {
+      historyFilterCourseId = chip.id;
+      renderHistory();
+    });
+    filterEl.appendChild(btn);
+  });
+
+  // 篩出「有實際內容」的日期（跳過 content 和 note 都空的）
+  const courseMap = {};
+  appData.settings.courses.forEach(c => { courseMap[c.id] = c; });
+
+  const dateEntries = Object.keys(appData.progress)
+    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .map(date => {
+      const day = appData.progress[date] || {};
+      const items = [];
+      Object.keys(day).forEach(cid => {
+        const rec = day[cid] || {};
+        const content = (rec.content || '').trim();
+        const note    = (rec.note || '').trim();
+        if (!content && !note) return;
+        if (historyFilterCourseId && cid !== historyFilterCourseId) return;
+        items.push({ cid, content, note });
+      });
+      return { date, items };
+    })
+    .filter(entry => entry.items.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date)); // 由新到舊
+
+  labelEl.textContent = '共 ' + dateEntries.length + ' 天有記錄' +
+    (historyFilterCourseId ? '（此課程）' : '');
+
+  if (!dateEntries.length) {
+    const emp = el('div', {class:'hist-empty'});
+    emp.textContent = historyFilterCourseId
+      ? '此課程尚無記錄。前往「記錄」頁輸入上課內容吧。'
+      : '尚無任何歷史記錄。\n前往「記錄」頁輸入第一筆上課內容吧。';
+    listEl.appendChild(emp);
+    return;
+  }
+
+  dateEntries.forEach(entry => {
+    const d = new Date(entry.date + 'T00:00:00');
+    const card = el('div', {class:'hist-card'});
+    card.addEventListener('click', () => jumpToRecordDate(entry.date));
+
+    const head = el('div', {class:'hist-card-head'});
+    const left = el('div', {class:'hist-date'});
+    left.textContent = (d.getMonth()+1) + '月' + d.getDate() + '日';
+    const right = el('div', {class:'hist-weekday'});
+    const weekLabels = ['日','一','二','三','四','五','六'];
+    right.textContent = d.getFullYear() + '年　週' + weekLabels[d.getDay()];
+    head.appendChild(left); head.appendChild(right);
+    card.appendChild(head);
+
+    entry.items.forEach(it => {
+      const course = courseMap[it.cid];
+      const row = el('div', {class:'hist-row'});
+      const dot = el('div', {class:'hist-row-dot'});
+      dot.style.background = course ? course.color : '#888780';
+      const body = el('div', {class:'hist-row-body'});
+      const courseLbl = el('div', {class:'hist-row-course'});
+      courseLbl.textContent = course ? course.name : '（已刪除課程）';
+      body.appendChild(courseLbl);
+      if (it.content) {
+        const c = el('div', {class:'hist-row-content'});
+        c.textContent = it.content;
+        body.appendChild(c);
+      }
+      if (it.note) {
+        const n = el('div', {class:'hist-row-note'});
+        n.textContent = '備註：' + it.note;
+        body.appendChild(n);
+      }
+      row.appendChild(dot); row.appendChild(body);
+      card.appendChild(row);
+    });
+
+    listEl.appendChild(card);
+  });
+}
+
+// 從歷史頁跳到記錄頁並載入指定日期
+function jumpToRecordDate(dstr) {
+  const pk = document.getElementById('record-date-picker');
+  if (pk) pk.value = dstr;
+  switchPage('record');
+  loadRecordForDate(dstr);
+}
+
 // ── 會議頁：✅ DOM API 取代 innerHTML ──
 function renderMeetings() {
   const td=new Date(); td.setHours(0,0,0,0);
@@ -1217,6 +1408,13 @@ function renderSettings() {
   document.getElementById('set-start').value=appData.settings.semesterStart||'';
   document.getElementById('set-end').value=appData.settings.semesterEnd||'';
   renderCourseRows();
+  renderDataStats();
+  // 預設清除日期設為今天的兩個月前（常見的學期交接點），使用者可再調整
+  const pd = document.getElementById('purge-before-date');
+  if (pd && !pd.value) {
+    const t = new Date(); t.setMonth(t.getMonth() - 2);
+    pd.value = t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate());
+  }
 }
 function renderCourseRows() {
   const r=document.getElementById('course-settings-rows'); r.innerHTML='';
@@ -1312,6 +1510,80 @@ async function saveSettings() {
   await saveData('settings'); renderOverview(); alert('設定已儲存！');
 }
 
+// ── 資料管理：清除舊資料 ──
+function renderDataStats() {
+  const statsEl = document.getElementById('data-stats');
+  if (!statsEl) return;
+  const progressKeys = Object.keys(appData.progress).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+  const progressCount = progressKeys.length;
+  const meetingCount  = appData.meetings.length;
+
+  // 找出記錄中最早與最晚的日期
+  let earliestProg = '—', latestProg = '—';
+  if (progressCount > 0) {
+    const sorted = [...progressKeys].sort();
+    earliestProg = sorted[0];
+    latestProg   = sorted[sorted.length - 1];
+  }
+  // 估算大小
+  const progSize    = new Blob([JSON.stringify(appData.progress)]).size;
+  const meetingSize = new Blob([JSON.stringify(appData.meetings)]).size;
+  const fmtSize = b => b < 1024 ? b + ' B' : (b/1024).toFixed(1) + ' KB';
+
+  statsEl.textContent =
+    '上課記錄：共 ' + progressCount + ' 天（' + earliestProg + ' ～ ' + latestProg + '），約 ' + fmtSize(progSize) + '\n' +
+    '會議／段考：共 ' + meetingCount + ' 筆，約 ' + fmtSize(meetingSize);
+}
+
+async function purgeProgressBefore(dstr) {
+  const cutoff = dstr;
+  const before = Object.keys(appData.progress).length;
+  const kept = {};
+  Object.keys(appData.progress).forEach(k => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) return;
+    if (k > cutoff) kept[k] = appData.progress[k];
+  });
+  const removed = before - Object.keys(kept).length;
+  appData.progress = kept;
+  await saveData('progress');
+  return removed;
+}
+
+async function purgeMeetingsBefore(dstr) {
+  const cutoff = dstr;
+  const before = appData.meetings.length;
+  appData.meetings = appData.meetings.filter(m => m.date > cutoff);
+  const removed = before - appData.meetings.length;
+  await saveData('meetings');
+  return removed;
+}
+
+async function doPurge(kind) {
+  const dstr = document.getElementById('purge-before-date').value;
+  if (!dstr || !/^\d{4}-\d{2}-\d{2}$/.test(dstr)) {
+    alert('請先選擇日期');
+    return;
+  }
+  const labels = { progress:'上課記錄', meetings:'會議／段考', all:'上課記錄＋會議／段考' };
+  if (!confirm('確定要清除 ' + dstr + '（含）以前的「' + labels[kind] + '」嗎？\n此操作無法復原，請確認已備份 Google Drive 上的檔案。')) return;
+
+  let removedP = 0, removedM = 0;
+  showSync('清除中…');
+  if (kind === 'progress' || kind === 'all') removedP = await purgeProgressBefore(dstr);
+  if (kind === 'meetings' || kind === 'all') removedM = await purgeMeetingsBefore(dstr);
+  hideSync();
+
+  const msgs = [];
+  if (kind === 'progress' || kind === 'all') msgs.push('上課記錄：清除 ' + removedP + ' 天');
+  if (kind === 'meetings' || kind === 'all') msgs.push('會議／段考：清除 ' + removedM + ' 筆');
+  alert('完成！\n' + msgs.join('\n'));
+
+  renderDataStats();
+  renderOverview();
+  renderMeetings();
+  renderCal();
+}
+
 // ── 課表頁 ──
 const DAYS = ['mon','tue','wed','thu','fri'];
 const DAY_LABELS = ['週一','週二','週三','週四','週五'];
@@ -1379,8 +1651,6 @@ function renderTimetable() {
   table.appendChild(tbody);
   wrap.appendChild(table);
   grid.appendChild(wrap);
-
-  renderExamCountdown();
 }
 
 // 格子選課 picker
@@ -1432,67 +1702,8 @@ function setCellCourse(key, courseId) {
 
 async function saveTimetable() {
   await saveData('timetable');
-  renderExamCountdown();
   renderOverview();
   alert('課表已儲存！');
-}
-
-// ── 段考前堂數計算 ──
-function renderExamCountdown() {
-  const container = document.getElementById('exam-countdown-list');
-  if (!container) return;
-  container.innerHTML = '';
-
-  const today = new Date(); today.setHours(0,0,0,0);
-  const exams = appData.meetings
-    .filter(m => m.type === 'exam' && new Date(m.date+'T00:00:00') >= today)
-    .sort((a,b) => new Date(a.date)-new Date(b.date));
-
-  if (!exams.length) {
-    const emp = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 0'});
-    emp.textContent = '尚未設定段考日期，請至「會議行程」新增段考。';
-    container.appendChild(emp);
-    return;
-  }
-
-  if (!appData.settings.semesterStart) {
-    const emp = el('div', {style:'font-size:12px;color:var(--ink3);padding:8px 0'});
-    emp.textContent = '請先在「設定」頁面填入學期開始日期。';
-    container.appendChild(emp);
-    return;
-  }
-
-  exams.forEach(exam => {
-    const todayNow = new Date(); const todayNowStr = todayNow.getFullYear()+'-'+String(todayNow.getMonth()+1).padStart(2,'0')+'-'+String(todayNow.getDate()).padStart(2,'0');
-    const counts = calcLessons(todayNowStr, exam.date);
-    const card = el('div', {class:'exam-cd-card'});
-    const title = el('div', {class:'exam-cd-title'});
-    const d = new Date(exam.date+'T00:00:00');
-    title.textContent = exam.title + '　' + (d.getMonth()+1) + '/' + d.getDate() + ' 前剩餘堂數';
-    card.appendChild(title);
-
-    const hasCourses = Object.values(counts).some(v => v > 0);
-    if (!hasCourses) {
-      const note = el('div', {style:'font-size:11px;color:var(--ink3)'});
-      note.textContent = '尚未設定課表，請先填寫上方課表格子。';
-      card.appendChild(note);
-    } else {
-      appData.settings.courses.forEach(c => {
-        const n = counts[c.id] || 0;
-        const row = el('div', {class:'exam-cd-row'});
-        const nameDiv = el('div', {class:'exam-cd-course'});
-        const dot = el('div', {style:`width:8px;height:8px;border-radius:50%;background:${c.color};flex-shrink:0`});
-        nameDiv.appendChild(dot);
-        nameDiv.appendChild(document.createTextNode(c.name));
-        const countDiv = el('div', {class:'exam-cd-count'});
-        countDiv.style.color = n <= 2 ? 'var(--exam)' : n <= 5 ? 'var(--holiday)' : 'var(--accent)';
-        countDiv.textContent = n + ' 堂';
-        row.appendChild(nameDiv); row.appendChild(countDiv);
-        card.appendChild(row);
-      });
-    }
-    container.appendChild(card);
-  });
 }
 </script>
 </body>
