@@ -146,6 +146,30 @@ textarea.record-input{resize:none;height:60px;line-height:1.5}
 </head>
 <body>
 <div id="sync-bar" class="sync-bar"></div>
+<script>
+// ✅ 預先檢查：若本機已記錄當日登入過，先隱藏登入畫面並顯示檢查 overlay，避免畫面閃爍
+(function() {
+  try {
+    var ok = localStorage.getItem('ta_ok');
+    var dt = localStorage.getItem('ta_date');
+    var d = new Date();
+    var today = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if (ok === '1' && dt === today) {
+      // 注入 style 讓 login-screen 初始隱藏（等 JS 決定後再顯示或維持隱藏）
+      var s = document.createElement('style');
+      s.textContent = '#login-screen{display:none !important}';
+      s.id = 'pre-auth-hide';
+      document.head.appendChild(s);
+      // 顯示檢查中提示
+      var ov = document.createElement('div');
+      ov.id = 'auth-check-overlay';
+      ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#FAFAF7;z-index:300;font-size:13px;color:#5F5E5A;letter-spacing:0.04em;font-family:-apple-system,"Hiragino Sans","Noto Sans TC",sans-serif';
+      ov.textContent = '檢查登入狀態…';
+      document.body.appendChild(ov);
+    }
+  } catch(e) { /* localStorage 不可用時，走一般流程 */ }
+})();
+</script>
 
 <div id="login-screen">
   <div class="login-logo">
@@ -429,36 +453,79 @@ function initGapi() {
   });
 }
 
+// ── 「每日登入一次」機制 ──
+// 策略：
+// 1. 使用者成功登入後，將今日日期（YYYY-MM-DD，本地時區）寫入 localStorage['ta_date']
+// 2. 同一天重新開啟 App 時，使用 prompt:'' 向 Google 靜默重取 access token
+// 3. 靜默重取成功 → 直接進入 App，不顯示登入畫面
+// 4. 靜默重取失敗（Google 授權已撤回 / 第三方 cookie 被阻擋等）→ 顯示登入畫面
+//
+// 注意：Google OAuth access token 本身有效期僅 1 小時，無法「真的」一整天不驗證；
+//      但 prompt:'' 的靜默請求只要授權還在就不需使用者互動，對使用者體驗等同「免登入」。
+
+function ymdLocal(d) {
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+
 function tryAutoLogin() {
   if (!gapiOk || !gisOk) return;
-  const saved = localStorage.getItem('ta_ok');
+  const saved     = localStorage.getItem('ta_ok');
   const savedDate = localStorage.getItem('ta_date');
-  const today = new Date().toDateString();
+  const today     = ymdLocal(new Date()); // ✅ 改用 YYYY-MM-DD，避免 locale 差異
   if (saved === '1' && savedDate === today) {
-    // 同一天：靜默取得 token
+    // 同一天：靜默取得 token，保持在「檢查登入中」畫面直到成功或失敗
+    showAuthCheck(true);
     tokenClient.requestAccessToken({
       prompt: '',
       error_callback: () => {
-        // 靜默失敗時顯示登入畫面
+        // 靜默失敗（例如使用者撤回授權）：清掉當日標記，讓使用者重新登入
+        localStorage.removeItem('ta_ok');
+        localStorage.removeItem('ta_date');
+        showAuthCheck(false);
         document.getElementById('login-screen').style.display = 'flex';
         document.getElementById('app').classList.remove('active');
       }
     });
-  } else if (saved === '1') {
-    // 隔天：清除舊標記，顯示登入畫面
-    localStorage.removeItem('ta_ok');
-    localStorage.removeItem('ta_date');
+  } else {
+    // 非同一天或從未登入：清掉舊標記並顯示登入畫面
+    if (saved === '1') {
+      localStorage.removeItem('ta_ok');
+      localStorage.removeItem('ta_date');
+    }
+    showAuthCheck(false);
+    document.getElementById('login-screen').style.display = 'flex';
   }
 }
+
+// 檢查登入中時顯示一個靜態畫面，避免「登入畫面閃一下又消失」
+function showAuthCheck(on) {
+  let overlay = document.getElementById('auth-check-overlay');
+  if (on) {
+    document.getElementById('login-screen').style.display = 'none';
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'auth-check-overlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:var(--paper);z-index:300;font-size:13px;color:var(--ink2);letter-spacing:0.04em';
+      overlay.textContent = '檢查登入狀態…';
+      document.body.appendChild(overlay);
+    }
+  } else {
+    if (overlay) overlay.remove();
+    // ✅ 一併移除預先注入的隱藏樣式，讓登入畫面可正常顯示
+    const pre = document.getElementById('pre-auth-hide');
+    if (pre) pre.remove();
+  }
+}
+
 function handleLogin() {
   if (!gapiOk || !gisOk) { showSync('初始化中，請稍後', true); return; }
   tokenClient.requestAccessToken({prompt:'select_account'});
 }
 async function onSignedIn() {
-  // 記錄登入時間，當天內不需重新登入
-  const today = new Date().toDateString();
+  // ✅ 記錄今日日期（YYYY-MM-DD），當天內不需再互動登入
   localStorage.setItem('ta_ok', '1');
-  localStorage.setItem('ta_date', today);
+  localStorage.setItem('ta_date', ymdLocal(new Date()));
+  showAuthCheck(false);
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
   showSync('載入資料中…');
@@ -472,6 +539,7 @@ function handleLogout() {
   if (tok) google.accounts.oauth2.revoke(tok.access_token, () => {});
   gapi.client.setToken(null);
   localStorage.removeItem('ta_ok');
+  localStorage.removeItem('ta_date');
   document.getElementById('app').classList.remove('active');
   document.getElementById('login-screen').style.display = 'flex';
 }
@@ -526,11 +594,16 @@ function sanitizeSettings(s) {
     semesterStart: sanitizeStr(s.semesterStart, 10),
     semesterEnd:   sanitizeStr(s.semesterEnd, 10),
     courses: s.courses.slice(0, 20).map(c => ({
-      id:           sanitizeStr(c.id, 50),
-      name:         sanitizeStr(c.name, 50),
-      color:        /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(c.color) ? c.color : '#888780',
-      totalLessons: Math.min(Math.max(parseInt(c.totalLessons)||0, 0), 999),
-      partTime:     !!c.partTime
+      id:             sanitizeStr(c.id, 50),
+      name:           sanitizeStr(c.name, 50),
+      color:          /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(c.color) ? c.color : '#888780',
+      totalLessons:   Math.min(Math.max(parseInt(c.totalLessons)||0, 0), 999),
+      partTime:       !!c.partTime,
+      // ✅ 新欄位：下學期畢業班 5/31 提前結束
+      earlyEndMay31:  !!c.earlyEndMay31,
+      // ✅ 新欄位：上學期隔週開課（9月～1月），以學期開始當週為第 1 週
+      biweekly:       !!c.biweekly,
+      biweeklyWeek:   (c.biweeklyWeek === 'even' ? 'even' : 'odd')  // 'odd' = 第1,3,5...週；'even' = 第2,4,6...週
     }))
   };
 }
@@ -695,9 +768,33 @@ const TW_HOLIDAYS = (() => {
 // fromDate: 起始日期字串 YYYY-MM-DD（含）
 // toDate:   結束日期字串 YYYY-MM-DD（不含）
 // 自動排除：台灣國定假日 + 手動輸入的假期與段考停課日
+//
+// 進階計算規則（per 課程）：
+//   - earlyEndMay31 : 勾選此項的課程，6/1 起不計算堂數（下學期畢業班 5/31 提前結束）
+//   - biweekly      : 勾選此項的課程，只計算「奇數週」或「偶數週」的上課日
+//                     週別計算以學期開始日當週為第 1 週
+//                     biweeklyWeek = 'odd'  → 只計第 1, 3, 5, ... 週
+//                     biweeklyWeek = 'even' → 只計第 2, 4, 6, ... 週
+//
+// 週別以「學期開始日當週的週一」為基準；若學期開始日尚未填寫，則隔週邏輯不啟用
+function weekNumberFromStart(cur, semStartStr) {
+  if (!semStartStr) return 0;
+  const base = new Date(semStartStr + 'T00:00:00');
+  const baseDow = base.getDay(); // 0=週日, 1=週一, ..., 6=週六
+  const mondayOffset = (baseDow === 0) ? -6 : (1 - baseDow); // 移到該週的週一
+  base.setDate(base.getDate() + mondayOffset);
+  const diffDays = Math.floor((cur - base) / 86400000);
+  if (diffDays < 0) return 0;
+  return Math.floor(diffDays / 7) + 1; // 1-based
+}
+
 function calcLessons(fromDate, toDate) {
   const result = {};
-  appData.settings.courses.forEach(c => result[c.id] = 0);
+  const courseMap = {};
+  appData.settings.courses.forEach(c => {
+    result[c.id] = 0;
+    courseMap[c.id] = c;
+  });
 
   if (!fromDate || !toDate) return result;
 
@@ -713,6 +810,7 @@ function calcLessons(fromDate, toDate) {
   );
   const stopDates = new Set([...TW_HOLIDAYS, ...manualStop]);
 
+  const semStart = appData.settings.semesterStart;
   const dayKeyMap = {1:'mon',2:'tue',3:'wed',4:'thu',5:'fri'};
   let cur = new Date(from);
 
@@ -722,9 +820,28 @@ function calcLessons(fromDate, toDate) {
       const dstr = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
       if (!stopDates.has(dstr)) {
         const dayKey = dayKeyMap[dow];
+        const curMonth = cur.getMonth() + 1; // 1-12
+        const weekNum  = weekNumberFromStart(cur, semStart);
+
         for (let p = 1; p <= 7; p++) {
           const cid = appData.timetable[dayKey+'-'+p];
-          if (cid && result.hasOwnProperty(cid)) result[cid]++;
+          if (cid && result.hasOwnProperty(cid)) {
+            const course = courseMap[cid];
+
+            // ✅ 規則 1：下學期 5/31 提前結束（6 月起不計）
+            if (course && course.earlyEndMay31 && curMonth >= 6) {
+              continue;
+            }
+
+            // ✅ 規則 2：隔週開課（只計奇數或偶數週）
+            if (course && course.biweekly && weekNum > 0) {
+              const isOddWeek = (weekNum % 2 === 1);
+              if (course.biweeklyWeek === 'even' && isOddWeek) continue;
+              if (course.biweeklyWeek !== 'even' && !isOddWeek) continue;
+            }
+
+            result[cid]++;
+          }
         }
       }
     }
@@ -1127,16 +1244,62 @@ function renderCourseRows() {
     chk.style.cssText='width:20px;height:20px;cursor:pointer;accent-color:var(--accent)';
     chk.addEventListener('change', () => { appData.settings.courses[i].partTime=chk.checked; });
     r4.appendChild(k4); r4.appendChild(chk);
+
+    // ✅ 新增：下學期 5/31 提前結束（畢業班）
+    const r5=el('div',{class:'settings-row'});
+    const k5=el('div',{class:'settings-key'});
+    k5.textContent='下學期 5/31 提前結束';
+    k5.title='勾選後，此課程在每年 6 月起不計入剩餘堂數（適用畢業班）';
+    const chk5=el('input',{type:'checkbox'});
+    chk5.checked=!!c.earlyEndMay31;
+    chk5.style.cssText='width:20px;height:20px;cursor:pointer;accent-color:var(--accent)';
+    chk5.addEventListener('change', () => { appData.settings.courses[i].earlyEndMay31=chk5.checked; });
+    r5.appendChild(k5); r5.appendChild(chk5);
+
+    // ✅ 新增：上學期隔週開課
+    const r6=el('div',{class:'settings-row'});
+    const k6=el('div',{class:'settings-key'});
+    k6.textContent='隔週開課（上學期）';
+    k6.title='勾選後，此課程只在選定的週別計算堂數（以學期開始當週為第 1 週）';
+    const chk6=el('input',{type:'checkbox'});
+    chk6.checked=!!c.biweekly;
+    chk6.style.cssText='width:20px;height:20px;cursor:pointer;accent-color:var(--accent)';
+    r6.appendChild(k6); r6.appendChild(chk6);
+
+    // ✅ 新增：隔週開課的週別選擇（只在勾選隔週時顯示）
+    const r6b=el('div',{class:'settings-row'});
+    r6b.style.paddingLeft='16px';
+    const k6b=el('div',{class:'settings-key',style:'font-size:11px;color:var(--ink3)'});
+    k6b.textContent='上課週別';
+    const sel6=el('select',{class:'settings-val-input',style:'width:120px;text-align:left'});
+    const opt1=el('option'); opt1.value='odd';  opt1.textContent='第 1,3,5... 週';
+    const opt2=el('option'); opt2.value='even'; opt2.textContent='第 2,4,6... 週';
+    sel6.appendChild(opt1); sel6.appendChild(opt2);
+    sel6.value = (c.biweeklyWeek === 'even' ? 'even' : 'odd');
+    sel6.addEventListener('change', () => { appData.settings.courses[i].biweeklyWeek=sel6.value; });
+    r6b.appendChild(k6b); r6b.appendChild(sel6);
+    r6b.style.display = c.biweekly ? 'flex' : 'none';
+
+    chk6.addEventListener('change', () => {
+      appData.settings.courses[i].biweekly=chk6.checked;
+      r6b.style.display = chk6.checked ? 'flex' : 'none';
+    });
+
     // 刪除按鈕
     const delBtn=el('button',{style:'font-size:11px;color:var(--exam);background:none;border:none;cursor:pointer;padding-top:4px'});
     delBtn.textContent='刪除這門課';
     delBtn.addEventListener('click', () => delCourse(i));
-    wrap.appendChild(r1); wrap.appendChild(r3); wrap.appendChild(r4); wrap.appendChild(delBtn);
+    wrap.appendChild(r1); wrap.appendChild(r3); wrap.appendChild(r4);
+    wrap.appendChild(r5); wrap.appendChild(r6); wrap.appendChild(r6b);
+    wrap.appendChild(delBtn);
     r.appendChild(wrap);
   });
 }
 function addCourse() {
-  appData.settings.courses.push({id:'c'+Date.now(),name:'新課程',color:'#888780',totalLessons:18,partTime:false});
+  appData.settings.courses.push({
+    id:'c'+Date.now(), name:'新課程', color:'#888780', totalLessons:18,
+    partTime:false, earlyEndMay31:false, biweekly:false, biweeklyWeek:'odd'
+  });
   renderCourseRows();
 }
 function delCourse(i) {
