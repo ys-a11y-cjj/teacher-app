@@ -441,7 +441,8 @@ let appData = {
 let fileIds = {settings:null, progress:null, meetings:null, timetable:null};
 let tokenClient = null, gapiOk = false, gisOk = false;
 let calView = 'month', calYear, calMonth;
-let authCheckTimer = null; // 用於防止「檢查登入狀態」畫面永久卡住
+let authCheckTimer = null;    // 防止「檢查登入狀態」畫面永久卡住
+let tokenRefreshTimer = null; // 定期靜默更新 Access Token（每 45 分鐘）
 
 // ── 初始化：用 addEventListener 取代 inline onclick ──
 window.addEventListener('DOMContentLoaded', () => {
@@ -600,7 +601,6 @@ function handleLogin() {
   tokenClient.requestAccessToken({prompt:'select_account'});
 }
 async function onSignedIn() {
-  // ✅ 記錄今日日期（YYYY-MM-DD），當天內不需再互動登入
   localStorage.setItem('ta_ok', '1');
   localStorage.setItem('ta_date', ymdLocal(new Date()));
   showAuthCheck(false);
@@ -610,9 +610,39 @@ async function onSignedIn() {
   await loadAll();
   hideSync();
   renderAll();
+  // ✅ 啟動背景 token 更新：每 45 分鐘靜默重取，避免 1 小時後自動失效
+  startTokenRefresh();
 }
+
+// Google Access Token 有效期為 1 小時；每 45 分鐘靜默更新一次確保不中斷
+const TOKEN_REFRESH_INTERVAL = 45 * 60 * 1000;
+
+function startTokenRefresh() {
+  stopTokenRefresh();
+  tokenRefreshTimer = setInterval(() => {
+    if (!tokenClient) return;
+    tokenClient.requestAccessToken({
+      prompt: '',
+      error_callback: () => {
+        // 靜默更新失敗（授權被撤回等）：停止定時、清除標記、顯示登入畫面
+        stopTokenRefresh();
+        localStorage.removeItem('ta_ok');
+        localStorage.removeItem('ta_date');
+        document.getElementById('app').classList.remove('active');
+        document.getElementById('login-screen').style.display = 'flex';
+        showSync('登入已過期，請重新登入', true);
+      }
+    });
+  }, TOKEN_REFRESH_INTERVAL);
+}
+
+function stopTokenRefresh() {
+  if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer = null; }
+}
+
 function handleLogout() {
   if (!confirm('確定要登出嗎？')) return;
+  stopTokenRefresh(); // ✅ 登出時停止背景定時更新
   const tok = gapi.client.getToken();
   if (tok) google.accounts.oauth2.revoke(tok.access_token, () => {});
   gapi.client.setToken(null);
