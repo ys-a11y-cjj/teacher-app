@@ -463,7 +463,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('purge-progress-btn').addEventListener('click', () => doPurge('progress'));
   document.getElementById('purge-meetings-btn').addEventListener('click', () => doPurge('meetings'));
   document.getElementById('purge-all-btn').addEventListener('click', () => doPurge('all'));
-  document.getElementById('record-date-picker').addEventListener('change', e => loadRecordForDate(e.target.value));
+  // ✅ 切換日期前先把目前欄位內容存入記憶體（不寫 Drive），再載入新日期
+  document.getElementById('record-date-picker').addEventListener('change', e => {
+    saveRecordToMemory();
+    loadRecordForDate(e.target.value);
+  });
 
   document.getElementById('save-timetable-btn').addEventListener('click', saveTimetable);
   ['overview','calendar','timetable','record','history','meetings','settings'].forEach(name => {
@@ -1245,6 +1249,25 @@ function loadRecordForDate(dstr) {
   });
   cl.appendChild(btn);
 }
+// 只把欄位內容寫入記憶體（不寫 Drive）；用於切換日期前保存草稿
+function saveRecordToMemory() {
+  const dstr = document.getElementById('record-date-picker').value;
+  if (!dstr) return;
+  const hasAnyInput = appData.settings.courses.some(c => {
+    const content = document.getElementById('rc-'+c.id)?.value || '';
+    const note    = document.getElementById('rn-'+c.id)?.value || '';
+    return content || note;
+  });
+  if (!hasAnyInput) return; // 欄位全空就不寫，避免建出空記錄
+  if (!appData.progress[dstr]) appData.progress[dstr] = {};
+  appData.settings.courses.forEach(c => {
+    appData.progress[dstr][c.id] = {
+      content: document.getElementById('rc-'+c.id)?.value || '',
+      note:    document.getElementById('rn-'+c.id)?.value || ''
+    };
+  });
+}
+
 async function saveRecord(dstr) {
   if (!appData.progress[dstr]) appData.progress[dstr]={};
   appData.settings.courses.forEach(c => {
@@ -1253,7 +1276,10 @@ async function saveRecord(dstr) {
       note: document.getElementById('rn-'+c.id)?.value||''
     };
   });
-  await saveData('progress'); renderOverview();
+  await saveData('progress');
+  renderOverview();
+  // ✅ 儲存後重新載入以顯示確認狀態
+  loadRecordForDate(dstr);
 }
 
 // ── 歷史記錄頁 ──
