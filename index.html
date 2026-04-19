@@ -1238,7 +1238,11 @@ function loadRecordForDate(dstr) {
   });
   const btn=el('button',{class:'save-btn'});
   btn.textContent='儲存今日進度';
-  btn.addEventListener('click', () => saveRecord(dstr)); // ✅ 不用 onclick 字串
+  btn.addEventListener('click', () => {
+    // ✅ 每次點擊時即時讀取日期選擇器的值，避免 closure 鎖住舊日期
+    const currentDstr = document.getElementById('record-date-picker').value;
+    saveRecord(currentDstr);
+  });
   cl.appendChild(btn);
 }
 async function saveRecord(dstr) {
@@ -1358,10 +1362,11 @@ function renderHistory() {
 
 // 從歷史頁跳到記錄頁並載入指定日期
 function jumpToRecordDate(dstr) {
+  // ✅ 先設好 picker 值，switchPage → initRecord 時會讀到正確日期
   const pk = document.getElementById('record-date-picker');
   if (pk) pk.value = dstr;
   switchPage('record');
-  loadRecordForDate(dstr);
+  // initRecord() 內部已會呼叫 loadRecordForDate(pk.value)，不需再重複呼叫
 }
 
 // ── 會議頁：✅ DOM API 取代 innerHTML ──
